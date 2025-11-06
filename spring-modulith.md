@@ -1,0 +1,734 @@
+# Spring Modulith Implementation
+*Practical Implementation of Domain-Centric Architecture using Spring Modulith*
+
+> **📘 Prerequisites:** This document shows how to implement [Domain-Centric Architecture](./README.md) using Spring Modulith. Read the main document first for core patterns and rules.
+
+## Introduction
+
+Spring Modulith is a framework for building **modular monolithic applications** with Spring Boot. It implements the [Domain-Centric Architecture](./README.md) patterns while providing:
+
+- **Module Verification** - Enforces architectural boundaries at compile/test time
+- **Event-Based Communication** - Application Events between modules
+- **Documentation** - Auto-generates module documentation
+- **Observability** - Built-in module metrics and tracing
+- **Integration Testing** - Test modules in isolation
+- **Event Publication Registry** - Guaranteed event delivery
+
+**Mapping:**
+```
+Spring Modulith Module = Bounded Context (from DDD)
+                       = Domain-Centric Architecture Package Structure
+```
+
+> **Note:** For core bounded context and layer concepts, see [Domain-Centric Architecture](./README.md).
+
+## What is Spring Modulith?
+
+Spring Modulith enables building modular monoliths with clear boundaries between modules, making it easy to:
+
+1. **Start Simple** - Single deployment unit, simple development
+2. **Enforce Boundaries** - Modules can't access each other's internals
+3. **Event-Driven** - Asynchronous communication between modules
+4. **Extract Services** - Easy path to microservices if needed
+
+**Benefits over plain Spring Boot:**
+- Explicit module boundaries
+- Compile-time verification of dependencies
+- Event-based decoupling
+- Easy testing of modules in isolation
+- Clear documentation of module structure
+
+## Core Concepts
+
+### Module
+
+**Definition:** In Spring Modulith, **one top-level package = one module**
+
+```
+com.company.ecommerce
+├── order/          ← Module (= Bounded Context)
+├── customer/       ← Module (= Bounded Context)
+└── inventory/      ← Module (= Bounded Context)
+```
+
+**Alignment:**
+- One module = one bounded context (typical)
+- One team owns one module (recommended)
+- Module follows [Domain-Centric Architecture layers](./README.md#layer-dependency-flow)
+
+### Module Types
+
+**Application Module** (default, recommended):
+```java
+@org.springframework.modulith.ApplicationModule
+package com.company.ecommerce.order;
+```
+- Main business module
+- Implements a bounded context
+- Only specified packages are public
+
+**Open Module** (use sparingly):
+```java
+@org.springframework.modulith.ApplicationModule(
+    type = Type.OPEN
+)
+package com.company.ecommerce.shared;
+```
+- All packages are public
+- Use only for shared kernel
+- Requires team coordination
+
+### Module API Surface
+
+Modules expose clear API surfaces through specific packages:
+
+**Published Package (`api/`):**
+```java
+// order/api/package-info.java
+@org.springframework.modulith.NamedInterface("api")
+package com.company.ecommerce.order.api;
+```
+- Public API of module
+- Synchronous integration point
+- Contains interfaces and DTOs
+
+**Event Package (`events/`):**
+```java
+// order/events/package-info.java
+@org.springframework.modulith.NamedInterface("events")
+package com.company.ecommerce.order.events;
+```
+- Events published by module
+- Asynchronous integration point
+- Contains integration event DTOs
+
+**Internal Package (`internal/`):**
+- Hidden implementation
+- Contains domain, application, adapter layers (see [Domain-Centric Architecture](./README.md#java-package-structure))
+- Other modules CANNOT access
+
+## Event-Driven Architecture in Spring Modulith
+
+### Domain Events vs Integration Events
+
+Spring Modulith supports two types of events that align with [Domain-Driven Design principles](./README.md#domain-event-rules-internal-to-bounded-context):
+
+#### Domain Events (Internal to Module)
+
+**Purpose:** Communication within bounded context (module)
+
+**Location:** `{module}/internal/domain/event/` OR `{module}/events/` if kept internal
+
+**Characteristics:**
+- Scope: Same module, can cross aggregates within module
+- Marker: Optional `DomainEvent` interface
+- Publishing: Via `ApplicationEventPublisher` within use case
+- Consumption: Via `@EventListener` within same module
+- Persistence: Optional
+- Retry: Not automatic
+- Transaction: Same transaction as use case
+
+**Example:**
+```java
+// order/internal/domain/event/OrderCreated.java
+public record OrderCreated(
+    UUID orderId,
+    CustomerId customerId,
+    Money totalAmount,
+    Instant occurredAt
+) implements DomainEvent {
+    // Internal domain event - stays within Order module
+}
+```
+
+#### Integration Events (Cross-Module)
+
+**Purpose:** Communication between modules (bounded contexts)
+
+**Location:** `{module}/events/` (published package)
+
+**Characteristics:**
+- **Marker:** `implements Externalized` (Spring Modulith interface) - **KEY DIFFERENCE**
+- Scope: Across modules, published to external consumers
+- Publishing: Via `ApplicationEventPublisher` + Event Publication Registry
+- Consumption: Via `@ApplicationModuleListener` in other modules
+- Persistence: Yes (Event Publication Registry ensures delivery)
+- Retry: Automatic retry on failure
+- Serialization: Must be serializable
+- Versioning: Required for cross-module contracts
+
+**Example:**
+```java
+// order/events/OrderCreatedEvent.java
+public record OrderCreatedEvent(
+    String eventId,
+    String orderId,
+    String customerId,
+    BigDecimal totalAmount,
+    Instant timestamp,
+    String version
+) implements org.springframework.modulith.events.Externalized {
+    // Integration event - crosses module boundaries
+    // Implements Externalized = Spring Modulith persists it
+}
+```
+
+### Event Architecture Comparison
+
+| Aspect | Domain Event | Integration Event |
+|--------|--------------|-------------------|
+| **Scope** | Within module | Across modules |
+| **Package** | `internal/domain/event/` | `events/` (published) |
+| **Marker** | Optional `DomainEvent` | `implements Externalized` ⭐ |
+| **Serialization** | Not required | Required |
+| **Versioning** | Not required | Required |
+| **Persistence** | Optional | Yes (Event Publication Registry) |
+| **Retry** | No | Yes (automatic) |
+| **Transaction** | Same transaction | Asynchronous (new transaction) |
+| **Visibility** | Private to module | Public to all modules |
+
+### Spring Modulith Event Publication Registry
+
+Spring Modulith provides an **Event Publication Registry** that ensures reliable event delivery:
+
+**Features:**
+- **Persistent Events**: Events marked with `@Externalized` are persisted to database
+- **Guaranteed Delivery**: Events are marked complete only after successful processing
+- **Automatic Retry**: Failed event handlers are retried automatically
+- **Idempotency Support**: Handlers can be idempotent via event IDs
+- **Observability**: Track event processing status and failures
+
+**Configuration:**
+```java
+@Configuration
+@EnableApplicationModuleListener  // Enables async event processing
+public class EventConfiguration {
+    // Spring Modulith auto-configures Event Publication Registry
+    // when spring-modulith-events-jdbc or spring-modulith-events-jpa is on classpath
+}
+```
+
+### Event Publishing Pattern
+
+**Publishing Domain Event (internal):**
+```java
+@Service
+@RequiredArgsConstructor
+public class CreateOrderUseCase {
+    private final ApplicationEventPublisher events;
+    private final OrderRepository orders;
+
+    @Transactional
+    public OrderId execute(CreateOrderCommand command) {
+        // 1. Create aggregate
+        Order order = Order.create(command);
+
+        // 2. Save aggregate
+        orders.save(order);
+
+        // 3. Publish domain event (same transaction)
+        events.publishEvent(new OrderCreated(
+            order.getId(),
+            order.getCustomerId(),
+            order.getTotalAmount(),
+            Instant.now()
+        ));
+
+        return order.getId();
+    }
+}
+```
+
+**Converting to Integration Event (cross-module):**
+```java
+// Listening to domain event and publishing integration event
+@Component
+@RequiredArgsConstructor
+class OrderEventPublisher {
+    private final ApplicationEventPublisher events;
+
+    @EventListener
+    void on(OrderCreated event) {
+        // Map domain event → integration event
+        events.publishEvent(new OrderCreatedEvent(
+            UUID.randomUUID().toString(),
+            event.orderId().toString(),
+            event.customerId().toString(),
+            event.totalAmount().getAmount(),
+            event.occurredAt(),
+            "v1"  // Version for compatibility
+        ));
+        // Integration event persisted by Event Publication Registry
+    }
+}
+```
+
+### Event Consumption Pattern
+
+**Consuming Integration Event (from another module):**
+```java
+@Component
+@RequiredArgsConstructor
+class InventoryEventListener {
+    private final ReserveStockUseCase reserveStock;
+
+    @ApplicationModuleListener  // Spring Modulith async listener
+    @Transactional(propagation = Propagation.REQUIRES_NEW)
+    void on(OrderCreatedEvent event) {
+        // Anti-Corruption Layer: Convert integration event → command
+        var command = new ReserveStockCommand(
+            OrderId.of(event.orderId()),
+            // Map to Inventory's domain language
+        );
+
+        // Execute use case in Inventory's bounded context
+        reserveStock.execute(command);
+
+        // Event marked complete in Event Publication Registry
+    }
+}
+```
+
+**Key Points:**
+- `@ApplicationModuleListener` enables async processing in new transaction
+- `Propagation.REQUIRES_NEW` ensures independent transaction
+- Failures trigger automatic retry (configured via Spring Modulith)
+- Anti-Corruption Layer protects consuming module's domain
+
+### Best Practices
+
+**When to Use Domain Events:**
+- Communication within the same module
+- Eventual consistency between aggregates in same bounded context
+- Triggering side effects in same transaction
+
+**When to Use Integration Events:**
+- Communication between different modules (bounded contexts)
+- Cross-team integration points
+- Events that may be externalized to message broker later
+- When guaranteed delivery and retry are needed
+
+**Naming Conventions:**
+- Domain Events: Past tense, no suffix (e.g., `OrderCreated`, `PaymentProcessed`)
+- Integration Events: Past tense + "Event" suffix (e.g., `OrderCreatedEvent`, `PaymentProcessedEvent`)
+
+## Module Structure
+
+### Recommended Structure: Module per Bounded Context
+
+```
+com.company.ecommerce
+├── order (module = bounded context)
+│   ├── api (published - public interface)
+│   │   ├── OrderApi.java
+│   │   ├── CreateOrderRequest.java
+│   │   └── OrderResponse.java
+│   ├── events (published - integration events)
+│   │   ├── OrderCreatedEvent.java
+│   │   └── OrderCancelledEvent.java
+│   └── internal (hidden)
+│       ├── domain
+│       │   ├── model
+│       │   │   ├── Order.java (Aggregate Root)
+│       │   │   ├── OrderLine.java (Entity)
+│       │   │   └── Money.java (Value Object)
+│       │   ├── service
+│       │   │   └── PricingService.java
+│       │   └── event
+│       │       └── OrderCreated.java (Domain Event)
+│       ├── application
+│       │   ├── port
+│       │   │   ├── in
+│       │   │   └── out
+│       │   └── usecase
+│       ├── adapter
+│       │   ├── in
+│       │   │   ├── web
+│       │   │   └── events
+│       │   └── out
+│       │       ├── persistence
+│       │       └── payment
+│       └── config
+│           └── OrderModuleConfiguration.java
+```
+
+> **Note:** The `internal/` structure follows [Domain-Centric Architecture layers](./README.md#java-package-structure). See main document for layer rules and responsibilities.
+
+### Module Configuration
+
+**Module Rules (package-info.java):**
+```java
+// order/package-info.java
+@org.springframework.modulith.ApplicationModule(
+    displayName = "Order Management",
+    allowedDependencies = {"customer::api", "inventory::api", "shared"}
+)
+package com.company.ecommerce.order;
+```
+
+**API Package:**
+```java
+// order/api/package-info.java
+@org.springframework.modulith.NamedInterface("api")
+package com.company.ecommerce.order.api;
+```
+
+**Events Package:**
+```java
+// order/events/package-info.java
+@org.springframework.modulith.NamedInterface("events")
+package com.company.ecommerce.order.events;
+```
+
+## Progressive Complexity for Spring Modulith Modules
+
+When creating a Spring Modulith module (bounded context), **start with minimal structure** and add complexity only when needed.
+
+> **Core Principle:** The full package structure shown in this document is for **mature modules**. Don't start there!
+
+For general progressive complexity guidelines, see [Domain-Centric Architecture](./README.md#progressive-complexity-principle).
+
+### Phase 1: Minimal Module Structure (Starting Out)
+
+**When:**
+- New module creation
+- <10 domain classes
+- <5 use cases
+- MVP or proof-of-concept phase
+
+**Timeline:** Weeks 1-2
+
+**Structure:**
+```
+com.company.ecommerce.order/ (module)
+├── package-info.java (@ApplicationModule)
+├── api/ (published)
+│   ├── package-info.java (@NamedInterface("api"))
+│   ├── OrderApi.java
+│   └── CreateOrderRequest.java
+├── events/ (published)
+│   ├── package-info.java (@NamedInterface("events"))
+│   └── OrderCreatedEvent.java (implements Externalized)
+└── internal/ (hidden)
+    ├── Order.java (Aggregate Root - domain)
+    ├── OrderLine.java (Entity - domain)
+    ├── Money.java (Value Object - domain)
+    ├── CreateOrderUseCase.java (application)
+    ├── OrderRepository.java (port - interface)
+    ├── OrderController.java (adapter - web)
+    └── OrderRepositoryAdapter.java (adapter - persistence)
+```
+
+**Characteristics:**
+- **Flat internal structure** - all implementation files directly in `internal/`
+- **Essential packages only** - `api/`, `events/`, `internal/`
+- **~10-15 files total**
+- Fast to navigate, easy to understand
+
+### Phase 2: Growing Module Structure (Adding Features)
+
+**When:**
+- 10-30 domain classes
+- 5-10 use cases
+- Multiple external integrations
+
+**Timeline:** Months 2-3
+
+**Triggers for Refactoring:**
+- **>10 files in internal/** suggests subdivision
+- **>3 domain events** suggests `internal/domain/event/` package
+- **>2 adapter types** suggests `internal/adapter/in/` and `/out/` packages
+
+**Structure:**
+```
+com.company.ecommerce.order/
+├── api/
+├── events/
+└── internal/
+    ├── domain/
+    │   ├── model/
+    │   │   ├── Order.java
+    │   │   ├── OrderLine.java
+    │   │   └── Money.java
+    │   ├── event/
+    │   │   ├── OrderCreated.java (Domain Event - internal)
+    │   │   └── OrderCancelled.java
+    │   └── service/
+    │       └── PricingService.java
+    ├── application/
+    │   ├── port/
+    │   │   ├── in/
+    │   │   └── out/
+    │   └── usecase/
+    ├── adapter/
+    │   ├── in/
+    │   │   ├── web/
+    │   │   └── event/
+    │   └── out/
+    │       ├── persistence/
+    │       └── payment/
+    └── config/
+```
+
+> **Refactoring Note:** Refactoring from Phase 1 → Phase 2 takes **<30 minutes** with IDE. Use IDE "Move" refactoring, and Spring Modulith verification tests catch any issues.
+
+### Phase 3: Mature Module Structure (Production-Ready)
+
+**When:**
+- >30 domain classes
+- >10 use cases
+- Complex domain logic
+- Multiple bounded contexts to integrate with
+
+**Timeline:** Months 6+
+
+**Full structure:** See [Module Structure](#module-structure) above for complete example.
+
+**Characteristics:**
+- **Full subdirectory structure**
+- **Use case folders** with Command/Query/Response
+- **60+ files**, well-organized
+- **Event mappers** - Domain Events → Integration Events
+- **Anti-Corruption Layers** - protect domain from external events
+
+## Shared Kernel in Spring Modulith
+
+The Shared Kernel is a **small, carefully controlled** `shared/` module containing code used across multiple modules.
+
+> **Important:** For general Shared Kernel concepts and when to use it, see [Domain-Centric Architecture](./README.md#packaging-rules).
+
+### Spring Modulith Configuration
+
+```java
+// shared/package-info.java
+@org.springframework.modulith.ApplicationModule(
+    displayName = "Shared Kernel",
+    type = org.springframework.modulith.ApplicationModule.Type.OPEN
+)
+package com.company.ecommerce.shared;
+```
+
+### Structure
+
+```
+com.company.ecommerce.shared/
+├── package-info.java (@ApplicationModule with Type.OPEN)
+├── marker/              ← Marker interfaces for DDD patterns
+│   ├── AggregateRoot.java
+│   ├── Entity.java
+│   ├── ValueObject.java
+│   ├── DomainEvent.java
+│   ├── InputPort.java
+│   └── OutputPort.java
+├── types/               ← Common value objects
+│   ├── Money.java
+│   ├── Address.java
+│   └── EmailAddress.java
+└── exception/           ← Base exceptions
+    ├── DomainException.java
+    └── NotFoundException.java
+```
+
+### Module Dependencies on Shared
+
+```java
+// order/package-info.java
+@org.springframework.modulith.ApplicationModule(
+    allowedDependencies = {
+        "shared",              // Can depend on entire shared module
+        "customer::api",
+        "inventory::api"
+    }
+)
+package com.company.ecommerce.order;
+```
+
+**All modules can depend on `shared`:**
+- Order → shared ✅
+- Customer → shared ✅
+- Inventory → shared ✅
+- Shared → (no dependencies on other modules) ✅
+
+## Testing
+
+### Module Structure Verification
+
+```java
+@Modulith
+class ModularityTests {
+
+    ApplicationModules modules = ApplicationModules.of(EcommerceApplication.class);
+
+    @Test
+    void verifiesModularStructure() {
+        modules.verify();
+    }
+
+    @Test
+    void documentsModules() throws IOException {
+        new Documenter(modules)
+            .writeDocumentation()
+            .writeIndividualModulesAsPlantUml();
+    }
+}
+```
+
+### Module Integration Tests
+
+```java
+@ApplicationModuleTest
+class OrderModuleIntegrationTest {
+
+    @Autowired
+    OrderApi orderApi;
+
+    @Autowired
+    ScenarioCustomizer scenarioCustomizer;
+
+    @Test
+    void shouldPublishOrderCreatedEvent() {
+        var request = new CreateOrderRequest(...);
+
+        // Verify event was published
+        scenarioCustomizer
+            .scenario("order-creation")
+            .stimulate(() -> orderApi.createOrder(request))
+            .andWaitForEventOfType(OrderCreatedEvent.class)
+            .matching(event -> event.orderId().equals("123"))
+            .toArriveAndVerify(event ->
+                assertThat(event.totalAmount()).isEqualTo(new BigDecimal("99.99"))
+            );
+    }
+}
+```
+
+## Module Communication
+
+### Option 1: Domain Events (Preferred - Async)
+
+```java
+// Publisher (Order Module)
+@Service
+class CreateOrderService implements OrderApi {
+    private final ApplicationEventPublisher events;
+
+    @Transactional
+    public OrderResponse createOrder(CreateOrderRequest request) {
+        Order order = Order.create(...);
+        repository.save(order);
+
+        // Publish event
+        events.publishEvent(new OrderCreatedEvent(...));
+
+        return toResponse(order);
+    }
+}
+
+// Consumer (Inventory Module)
+@Component
+class OrderEventListener {
+    @ApplicationModuleListener
+    @Transactional(propagation = Propagation.REQUIRES_NEW)
+    void on(OrderCreatedEvent event) {
+        // Reserve stock for order
+        inventoryService.reserveStock(event.orderId());
+    }
+}
+```
+
+**Benefits:**
+- ✅ Loose coupling
+- ✅ Async processing
+- ✅ Event persistence (with Spring Modulith JPA)
+- ✅ Automatic retry
+- ✅ Transaction boundaries
+
+### Option 2: Direct API Calls (Sync)
+
+```java
+// Publisher (Order Module API)
+// order/api/OrderApi.java
+public interface OrderApi {
+    OrderResponse createOrder(CreateOrderRequest request);
+    OrderResponse findOrder(String orderId);
+}
+
+// Implementation (Order Module)
+@Service
+class CreateOrderService implements OrderApi {
+    // Implementation
+}
+
+// Consumer (Customer Module)
+@Service
+class CustomerService {
+    private final OrderApi orderApi; // injected from order module
+
+    public CustomerStats getCustomerStats(String customerId) {
+        var orders = orderApi.findOrdersByCustomer(customerId);
+        return calculateStats(orders);
+    }
+}
+```
+
+**Module Dependency:**
+```java
+// customer/package-info.java
+@ApplicationModule(
+    allowedDependencies = {"order::api"}  // Can only use order.api
+)
+package com.company.ecommerce.customer;
+```
+
+## Build Configuration
+
+### Maven
+
+```xml
+<!-- pom.xml -->
+<dependencies>
+    <dependency>
+        <groupId>org.springframework.modulith</groupId>
+        <artifactId>spring-modulith-starter-core</artifactId>
+    </dependency>
+    <dependency>
+        <groupId>org.springframework.modulith</groupId>
+        <artifactId>spring-modulith-starter-jpa</artifactId>
+    </dependency>
+    <dependency>
+        <groupId>org.springframework.modulith</groupId>
+        <artifactId>spring-modulith-starter-test</artifactId>
+        <scope>test</scope>
+    </dependency>
+</dependencies>
+```
+
+### Gradle
+
+```groovy
+dependencies {
+    implementation 'org.springframework.modulith:spring-modulith-starter-core'
+    implementation 'org.springframework.modulith:spring-modulith-starter-jpa'
+    testImplementation 'org.springframework.modulith:spring-modulith-starter-test'
+}
+```
+
+## Summary
+
+**Spring Modulith implements [Domain-Centric Architecture](./README.md) by:**
+
+1. **Enforcing Boundaries** - Modules = Bounded Contexts with verified boundaries
+2. **Event-Driven** - Domain Events and Integration Events with guaranteed delivery
+3. **Clear Structure** - `api/`, `events/`, `internal/` packages
+4. **Progressive Complexity** - Start simple, grow as needed
+5. **Testing** - Verify structure and test modules in isolation
+
+**Migration Path:**
+- Start with Spring Modulith modular monolith
+- Extract to microservices when needed
+- Event-based integration survives extraction
+
+**Cross-References:**
+- Core architecture: [Domain-Centric Architecture](./README.md)
+- Deployment options: [Deployment Patterns](./deployment-patterns.md)
+- Team alignment: [Team Topologies Integration](./team-topologies.md)
