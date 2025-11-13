@@ -1,0 +1,869 @@
+# ArchUnit Governance for Domain-Centric Architecture
+
+**Automated Architectural Testing and Enforcement**
+
+> **Prerequisites:** This document shows how to implement automated architecture testing for [Domain-Centric Architecture](./README.md) using ArchUnit. Read the main document first for core patterns and rules.
+
+---
+
+## Table of Contents
+
+1. [Introduction](#introduction)
+2. [Setup and Configuration](#setup-and-configuration)
+3. [Core Rule Categories](#core-rule-categories)
+4. [Complete Test Suites](#complete-test-suites)
+5. [Best Practices](#best-practices)
+6. [CI/CD Integration](#cicd-integration)
+7. [Common Pitfalls and Solutions](#common-pitfalls-and-solutions)
+
+---
+
+## Introduction
+
+### What is ArchUnit?
+
+**ArchUnit** is a Java library that allows you to test your architecture using unit tests. It verifies that your code follows defined architectural rules by analyzing compiled classes.
+
+**Key Capabilities:**
+- ✅ Enforce layer dependencies
+- ✅ Verify package structure
+- ✅ Check naming conventions
+- ✅ Validate framework independence
+- ✅ Ensure DDD pattern compliance
+- ✅ Detect cyclic dependencies
+
+### Why Use ArchUnit for Domain-Centric Architecture?
+
+**Problem Without ArchUnit:**
+- Architecture erodes over time ("broken window theory")
+- Violations discovered late in code review or production
+- Inconsistent application of patterns across team
+- New developers may not understand architectural rules
+- Refactoring introduces accidental violations
+
+**Solution With ArchUnit:**
+- Architecture violations fail the build immediately
+- Continuous enforcement on every commit
+- Executable documentation of architecture rules
+- Onboarding tool for new developers
+- Confident refactoring with safety net
+
+### Benefits
+
+1. **Prevents Architectural Drift** - Rules enforced automatically on every build
+2. **Living Documentation** - Architecture rules as executable tests
+3. **Early Detection** - Catch violations before code review
+4. **Team Alignment** - Explicit, verifiable architectural guidelines
+5. **Confident Refactoring** - Safety net when restructuring code
+6. **Reduced Code Review** - Automated checks reduce manual review burden
+
+---
+
+## Setup and Configuration
+
+### Maven Dependency
+
+```xml
+<dependency>
+    <groupId>com.tngtech.archunit</groupId>
+    <artifactId>archunit-junit5</artifactId>
+    <version>1.2.1</version>
+    <scope>test</scope>
+</dependency>
+```
+
+### Gradle Dependency
+
+```gradle
+testImplementation 'com.tngtech.archunit:archunit-junit5:1.2.1'
+```
+
+### Basic Test Class Structure
+
+```java
+package com.company.project.architecture;
+
+import com.tngtech.archunit.core.importer.ImportOption;
+import com.tngtech.archunit.junit.AnalyzeClasses;
+import com.tngtech.archunit.junit.ArchTest;
+import com.tngtech.archunit.lang.ArchRule;
+
+import static com.tngtech.archunit.lang.syntax.ArchRuleDefinition.*;
+
+/**
+ * Architecture tests for Domain-Centric Architecture.
+ *
+ * These tests automatically verify architectural rules on every build.
+ * Violations will fail the test suite.
+ */
+@AnalyzeClasses(
+    packages = "com.company.project",
+    importOptions = {
+        ImportOption.DoNotIncludeTests.class,
+        ImportOption.DoNotIncludeJars.class
+    }
+)
+public class ArchitectureTest {
+
+    @ArchTest
+    static final ArchRule example_rule =
+        noClasses()
+            .that().resideInAPackage("..domain..")
+            .should().dependOnClassesThat()
+                .resideInPackage("..infrastructure..");
+}
+```
+
+**Key Annotations:**
+- `@AnalyzeClasses` - Defines which packages to analyze
+- `@ArchTest` - Marks a field or method as an architecture test
+- `importOptions` - Excludes tests and external libraries from analysis
+
+---
+
+## Core Rule Categories
+
+### 1. Layer Dependency Rules
+
+Enforce that dependencies only point inward toward the domain.
+
+```java
+@ArchTest
+static final ArchRule domain_should_not_depend_on_outer_layers =
+    noClasses()
+        .that().resideInAPackage("..domain..")
+        .should().dependOnClassesThat()
+            .resideInAnyPackage(
+                "..application..",
+                "..adapter..",
+                "..infrastructure.."
+            )
+        .because("Domain must be independent of outer layers");
+
+@ArchTest
+static final ArchRule application_should_not_depend_on_adapters =
+    noClasses()
+        .that().resideInAPackage("..application..")
+        .should().dependOnClassesThat()
+            .resideInAnyPackage("..adapter..", "..infrastructure..")
+        .because("Application should only depend on domain");
+
+@ArchTest
+static final ArchRule adapters_should_not_depend_on_infrastructure =
+    noClasses()
+        .that().resideInAPackage("..adapter..")
+        .should().dependOnClassesThat()
+            .resideInPackage("..infrastructure..")
+        .because("Adapters should not depend on infrastructure layer");
+
+@ArchTest
+static final ArchRule layered_architecture_is_respected =
+    layeredArchitecture()
+        .consideringAllDependencies()
+
+        .layer("Domain").definedBy("..domain..")
+        .layer("Application").definedBy("..application..")
+        .layer("Adapter").definedBy("..adapter..")
+        .layer("Infrastructure").definedBy("..infrastructure..")
+
+        .whereLayer("Domain").mayNotAccessAnyLayer()
+        .whereLayer("Application").mayOnlyAccessLayers("Domain")
+        .whereLayer("Adapter").mayOnlyAccessLayers("Application", "Domain")
+        .whereLayer("Infrastructure").mayAccessAnyLayer()
+
+        .because("Dependencies must point inward toward domain");
+```
+
+### 2. Framework Independence Rules
+
+Ensure domain and application layers remain framework-agnostic.
+
+```java
+@ArchTest
+static final ArchRule domain_should_be_framework_agnostic =
+    noClasses()
+        .that().resideInAPackage("..domain..")
+        .should().dependOnClassesThat()
+            .resideInAnyPackage(
+                "org.springframework..",
+                "jakarta.persistence..",
+                "javax.persistence..",
+                "org.hibernate..",
+                "jakarta.validation..",
+                "javax.validation.."
+            )
+        .because("Domain must be framework-agnostic");
+
+@ArchTest
+static final ArchRule domain_should_not_use_jpa_annotations =
+    noFields()
+        .that().areDeclaredInClassesThat().resideInAPackage("..domain..")
+        .should().beAnnotatedWith("jakarta.persistence.Entity")
+        .orShould().beAnnotatedWith("jakarta.persistence.Id")
+        .orShould().beAnnotatedWith("jakarta.persistence.Column")
+        .orShould().beAnnotatedWith("jakarta.persistence.Table")
+        .orShould().beAnnotatedWith("jakarta.persistence.ManyToOne")
+        .orShould().beAnnotatedWith("jakarta.persistence.OneToMany")
+        .because("Domain should not use JPA annotations - use separate persistence model");
+
+@ArchTest
+static final ArchRule application_should_be_framework_agnostic =
+    noClasses()
+        .that().resideInAPackage("..application..")
+        .should().dependOnClassesThat()
+            .resideInAnyPackage(
+                "org.springframework.web..",
+                "jakarta.ws.rs..",
+                "org.springframework.data.."
+            )
+        .because("Application layer should not depend on web or persistence frameworks");
+
+@ArchTest
+static final ArchRule application_layer_can_use_minimal_spring =
+    classes()
+        .that().resideInAPackage("..application..")
+        .should().onlyDependOnClassesThat()
+            .resideInAnyPackage(
+                "..domain..",
+                "..application..",
+                "..sharedkernel..",
+                "java..",
+                "org.springframework.stereotype..",  // @Service is acceptable
+                "org.springframework.transaction.."   // @Transactional is acceptable (pragmatic)
+            )
+        .because("Application can use minimal Spring annotations for pragmatism");
+```
+
+### 3. DDD Pattern Rules
+
+Validate proper implementation of DDD tactical patterns.
+
+```java
+@ArchTest
+static final ArchRule aggregates_should_implement_aggregate_root =
+    classes()
+        .that().haveSimpleNameEndingWith("Aggregate")
+        .or().areAnnotatedWith("AggregateRoot")  // If you have custom annotation
+        .should().implement(AggregateRoot.class)
+        .because("Aggregates must implement AggregateRoot marker interface");
+
+@ArchTest
+static final ArchRule value_objects_should_be_immutable =
+    classes()
+        .that().implement(Value.class)
+        .should().haveOnlyFinalFields()
+        .andShould().haveOnlyPrivateConstructors()  // Force factory methods
+        .because("Value Objects must be immutable");
+
+@ArchTest
+static final ArchRule entities_should_have_identity =
+    classes()
+        .that().implement(Entity.class)
+        .should().haveMethod("getId")
+        .because("Entities must have identity via getId() method");
+
+@ArchTest
+static final ArchRule domain_events_should_be_immutable =
+    classes()
+        .that().implement(DomainEvent.class)
+        .should().haveOnlyFinalFields()
+        .because("Domain Events must be immutable (they represent past facts)");
+
+@ArchTest
+static final ArchRule domain_services_should_be_stateless =
+    classes()
+        .that().implement(DomainService.class)
+        .should().haveOnlyFinalFields()
+        .because("Domain Services should be stateless");
+
+@ArchTest
+static final ArchRule aggregates_should_be_in_domain_model =
+    classes()
+        .that().implement(AggregateRoot.class)
+        .should().resideInAPackage("..domain.model..")
+        .because("Aggregates belong in domain model package");
+
+@ArchTest
+static final ArchRule domain_events_should_be_in_domain_event_package =
+    classes()
+        .that().implement(DomainEvent.class)
+        .should().resideInAPackage("..domain.event..")
+        .because("Domain Events belong in domain event package");
+```
+
+### 4. Naming Convention Rules
+
+Enforce consistent naming across the codebase.
+
+```java
+@ArchTest
+static final ArchRule input_ports_should_follow_naming =
+    classes()
+        .that().resideInAPackage("..application..port.in..")
+        .or().resideInAPackage("..application..*..") // For use case folder structure
+            .and().areInterfaces()
+            .and().arePublic()
+        .should().haveSimpleNameEndingWith("InputPort")
+        .orShould().haveSimpleNameEndingWith("UseCase")
+        .orShould().haveSimpleNameEndingWith("Query")
+        .because("Input ports should follow naming conventions");
+
+@ArchTest
+static final ArchRule use_case_implementations_should_follow_naming =
+    classes()
+        .that().resideInAPackage("..application..usecase..")
+        .or().implement(InputPort.class)
+        .and().areNotInterfaces()
+        .should().haveSimpleNameEndingWith("UseCase")
+        .orShould().haveSimpleNameEndingWith("Service")
+        .because("Use case implementations should follow naming conventions");
+
+@ArchTest
+static final ArchRule repositories_should_follow_naming =
+    classes()
+        .that().areAssignableTo(Repository.class)
+        .and().areInterfaces()
+        .should().haveSimpleNameEndingWith("Repository")
+        .because("Repository interfaces should end with 'Repository'");
+
+@ArchTest
+static final ArchRule repository_adapters_should_follow_naming =
+    classes()
+        .that().implement(Repository.class)
+        .and().areNotInterfaces()
+        .should().haveSimpleNameEndingWith("RepositoryAdapter")
+        .orShould().haveSimpleNameEndingWith("RepositoryImpl")
+        .because("Repository implementations should follow naming conventions");
+
+@ArchTest
+static final ArchRule commands_should_follow_naming =
+    classes()
+        .that().resideInAPackage("..application..")
+        .and().areRecords()
+        .should().haveSimpleNameEndingWith("Command")
+        .orShould().haveSimpleNameEndingWith("Query")
+        .because("Input models should be named Command or Query");
+
+@ArchTest
+static final ArchRule responses_should_follow_naming =
+    classes()
+        .that().resideInAPackage("..application..")
+        .and().areRecords()
+        .and().haveSimpleNameMatching(".*Response.*")
+        .should().haveSimpleNameEndingWith("Response")
+        .because("Output models should end with 'Response'");
+```
+
+### 5. Port and Adapter Rules
+
+Verify proper implementation of hexagonal architecture.
+
+```java
+@ArchTest
+static final ArchRule input_ports_should_be_interfaces =
+    classes()
+        .that().resideInAPackage("..application..port.in..")
+        .or().haveSimpleNameEndingWith("InputPort")
+        .should().beInterfaces()
+        .because("Input ports must be interfaces");
+
+@ArchTest
+static final ArchRule output_ports_should_be_interfaces =
+    classes()
+        .that().resideInAPackage("..application..port.out..")
+        .or().resideInAPackage("..application..shared..")
+        .and().areNotRecords()  // Exclude DTOs
+        .should().beInterfaces()
+        .because("Output ports must be interfaces");
+
+@ArchTest
+static final ArchRule adapters_should_implement_ports =
+    classes()
+        .that().resideInAPackage("..adapter.outgoing..")
+        .and().areNotInterfaces()
+        .should().implement(OutputPort.class)  // If you have OutputPort marker
+        .orShould().beAnnotatedWith("Component")
+        .orShould().beAnnotatedWith("Repository")
+        .because("Outbound adapters should implement output ports");
+
+@ArchTest
+static final ArchRule input_adapters_should_call_input_ports =
+    classes()
+        .that().resideInAPackage("..adapter.incoming..")
+        .should().dependOnClassesThat()
+            .resideInAnyPackage("..application..port.in..", "..application..*InputPort")
+        .because("Input adapters should only depend on input ports, not implementations");
+
+@ArchTest
+static final ArchRule adapters_should_not_depend_on_each_other =
+    noClasses()
+        .that().resideInAPackage("..adapter.incoming..")
+        .should().dependOnClassesThat()
+            .resideInPackage("..adapter.outgoing..")
+        .andShould().dependOnClassesThat()
+            .resideInPackage("..adapter.incoming..")
+        .because("Adapters should not depend on each other directly");
+```
+
+### 6. Shared Kernel Rules
+
+Ensure Shared Kernel remains independent and minimal.
+
+```java
+@ArchTest
+static final ArchRule shared_kernel_should_have_no_dependencies =
+    noClasses()
+        .that().resideInAPackage("..sharedkernel..")
+        .should().dependOnClassesThat()
+            .resideInAnyPackage(
+                "..domain..",
+                "..application..",
+                "..adapter..",
+                "..infrastructure.."
+            )
+        .because("Shared Kernel must be independent - no dependencies on bounded contexts");
+
+@ArchTest
+static final ArchRule shared_kernel_should_not_use_frameworks =
+    noClasses()
+        .that().resideInAPackage("..sharedkernel..")
+        .should().dependOnClassesThat()
+            .resideInAnyPackage(
+                "org.springframework..",
+                "jakarta..",
+                "javax..",
+                "org.hibernate.."
+            )
+        .because("Shared Kernel must be framework-agnostic");
+
+@ArchTest
+static final ArchRule bounded_contexts_should_not_depend_on_each_other =
+    noClasses()
+        .that().resideInAPackage("..order..")
+        .should().dependOnClassesThat()
+            .resideInAnyPackage(
+                "..customer..",
+                "..inventory..",
+                "..payment.."
+            )
+        .because("Bounded contexts should not have direct dependencies on each other");
+```
+
+### 7. Cyclic Dependency Rules
+
+Detect and prevent circular dependencies.
+
+```java
+@ArchTest
+static final ArchRule no_cycles_in_packages =
+    slices()
+        .matching("com.company.project.(*)..")
+        .should().beFreeOfCycles()
+        .because("Cyclic dependencies make code hard to understand and maintain");
+
+@ArchTest
+static final ArchRule no_cycles_between_bounded_contexts =
+    slices()
+        .matching("com.company.project.(order|customer|inventory|payment).(*)..")
+        .should().beFreeOfCycles()
+        .because("Bounded contexts should not have cyclic dependencies");
+```
+
+---
+
+## Complete Test Suites
+
+### Suite 1: Layer Dependency Test
+
+```java
+package com.company.project.architecture;
+
+import com.tngtech.archunit.core.importer.ImportOption;
+import com.tngtech.archunit.junit.AnalyzeClasses;
+import com.tngtech.archunit.junit.ArchTest;
+import com.tngtech.archunit.lang.ArchRule;
+
+import static com.tngtech.archunit.library.Architectures.layeredArchitecture;
+
+/**
+ * Verifies layer dependency rules for Domain-Centric Architecture.
+ */
+@AnalyzeClasses(packages = "com.company.project", importOptions = ImportOption.DoNotIncludeTests.class)
+public class LayerDependencyTest {
+
+    @ArchTest
+    static final ArchRule layered_architecture_is_respected =
+        layeredArchitecture()
+            .consideringAllDependencies()
+
+            .layer("Domain").definedBy("..domain..")
+            .layer("Application").definedBy("..application..")
+            .layer("Adapter").definedBy("..adapter..")
+            .layer("Infrastructure").definedBy("..infrastructure..")
+            .layer("SharedKernel").definedBy("..sharedkernel..")
+
+            .whereLayer("Domain").mayOnlyAccessLayers("SharedKernel")
+            .whereLayer("Application").mayOnlyAccessLayers("Domain", "SharedKernel")
+            .whereLayer("Adapter").mayOnlyAccessLayers("Application", "Domain", "SharedKernel")
+            .whereLayer("Infrastructure").mayAccessAnyLayer()
+            .whereLayer("SharedKernel").mayNotAccessAnyLayer()
+
+            .because("Dependencies must follow Domain-Centric Architecture rules");
+}
+```
+
+### Suite 2: Framework Independence Test
+
+```java
+package com.company.project.architecture;
+
+import com.tngtech.archunit.core.importer.ImportOption;
+import com.tngtech.archunit.junit.AnalyzeClasses;
+import com.tngtech.archunit.junit.ArchTest;
+import com.tngtech.archunit.lang.ArchRule;
+
+import static com.tngtech.archunit.lang.syntax.ArchRuleDefinition.*;
+
+/**
+ * Ensures domain and application remain framework-independent.
+ */
+@AnalyzeClasses(packages = "com.company.project", importOptions = ImportOption.DoNotIncludeTests.class)
+public class FrameworkIndependenceTest {
+
+    @ArchTest
+    static final ArchRule domain_is_framework_independent =
+        noClasses()
+            .that().resideInAPackage("..domain..")
+            .should().dependOnClassesThat()
+                .resideInAnyPackage(
+                    "org.springframework..",
+                    "jakarta..",
+                    "javax..",
+                    "org.hibernate.."
+                );
+
+    @ArchTest
+    static final ArchRule domain_does_not_use_jpa =
+        noMethods()
+            .that().areDeclaredInClassesThat().resideInAPackage("..domain..")
+            .should().beAnnotatedWith("jakarta.persistence.Entity")
+            .orShould().beAnnotatedWith("jakarta.persistence.Id");
+
+    @ArchTest
+    static final ArchRule shared_kernel_is_framework_independent =
+        noClasses()
+            .that().resideInAPackage("..sharedkernel..")
+            .should().dependOnClassesThat()
+                .resideInAnyPackage("org.springframework..", "jakarta..", "javax..");
+}
+```
+
+### Suite 3: DDD Pattern Test
+
+```java
+package com.company.project.architecture;
+
+import com.company.project.sharedkernel.domain.marker.*;
+import com.tngtech.archunit.core.importer.ImportOption;
+import com.tngtech.archunit.junit.AnalyzeClasses;
+import com.tngtech.archunit.junit.ArchTest;
+import com.tngtech.archunit.lang.ArchRule;
+
+import static com.tngtech.archunit.lang.syntax.ArchRuleDefinition.*;
+
+/**
+ * Verifies DDD tactical patterns are correctly implemented.
+ */
+@AnalyzeClasses(packages = "com.company.project", importOptions = ImportOption.DoNotIncludeTests.class)
+public class DddPatternTest {
+
+    @ArchTest
+    static final ArchRule value_objects_are_immutable =
+        classes()
+            .that().implement(Value.class)
+            .should().haveOnlyFinalFields()
+            .because("Value Objects must be immutable");
+
+    @ArchTest
+    static final ArchRule domain_events_are_immutable =
+        classes()
+            .that().implement(DomainEvent.class)
+            .should().haveOnlyFinalFields()
+            .because("Domain Events represent past facts and must be immutable");
+
+    @ArchTest
+    static final ArchRule entities_have_identity =
+        classes()
+            .that().implement(Entity.class)
+            .should().haveMethod("getId")
+            .because("Entities must have identity");
+
+    @ArchTest
+    static final ArchRule aggregates_are_in_domain_model =
+        classes()
+            .that().implement(AggregateRoot.class)
+            .should().resideInAPackage("..domain.model..")
+            .because("Aggregates belong in the domain model");
+}
+```
+
+### Suite 4: Naming Convention Test
+
+```java
+package com.company.project.architecture;
+
+import com.tngtech.archunit.core.importer.ImportOption;
+import com.tngtech.archunit.junit.AnalyzeClasses;
+import com.tngtech.archunit.junit.ArchTest;
+import com.tngtech.archunit.lang.ArchRule;
+
+import static com.tngtech.archunit.lang.syntax.ArchRuleDefinition.*;
+
+/**
+ * Enforces naming conventions across the codebase.
+ */
+@AnalyzeClasses(packages = "com.company.project", importOptions = ImportOption.DoNotIncludeTests.class)
+public class NamingConventionTest {
+
+    @ArchTest
+    static final ArchRule input_ports_follow_naming =
+        classes()
+            .that().areInterfaces()
+            .and().resideInAPackage("..application..")
+            .and().haveSimpleNameEndingWith("InputPort")
+            .should().bePublic()
+            .because("Input ports should be public interfaces");
+
+    @ArchTest
+    static final ArchRule repositories_follow_naming =
+        classes()
+            .that().areInterfaces()
+            .and().haveSimpleNameEndingWith("Repository")
+            .should().resideInAPackage("..application..")
+            .because("Repository interfaces belong in application layer");
+
+    @ArchTest
+    static final ArchRule use_cases_follow_naming =
+        classes()
+            .that().areNotInterfaces()
+            .and().haveSimpleNameEndingWith("UseCase")
+            .should().resideInAPackage("..application..")
+            .because("Use cases belong in application layer");
+}
+```
+
+---
+
+## Best Practices
+
+### 1. Organize Tests by Category
+
+Create separate test classes for different rule categories:
+- `LayerDependencyTest` - Layer dependency rules
+- `FrameworkIndependenceTest` - Framework usage rules
+- `DddPatternTest` - DDD pattern implementation
+- `NamingConventionTest` - Naming standards
+- `PortAdapterTest` - Hexagonal architecture rules
+
+### 2. Use Descriptive Test Names and Messages
+
+```java
+// ❌ Bad - Vague
+@ArchTest
+static final ArchRule rule1 =
+    noClasses().that().resideInAPackage("..domain..").should().dependOnClassesThat()...;
+
+// ✅ Good - Descriptive
+@ArchTest
+static final ArchRule domain_should_not_depend_on_infrastructure =
+    noClasses()
+        .that().resideInAPackage("..domain..")
+        .should().dependOnClassesThat().resideInPackage("..infrastructure..")
+        .because("Domain must remain independent of infrastructure concerns");
+```
+
+### 3. Start Simple, Add Rules Incrementally
+
+Don't try to add all rules at once:
+1. Start with basic layer dependency rules
+2. Add framework independence rules
+3. Add DDD pattern rules
+4. Add naming convention rules
+5. Add custom business-specific rules
+
+### 4. Freeze Violations for Legacy Code
+
+If adding ArchUnit to an existing codebase with violations:
+
+```java
+@ArchTest
+static final ArchRule domain_is_framework_independent =
+    FreezingArchRule.freeze(
+        noClasses()
+            .that().resideInAPackage("..domain..")
+            .should().dependOnClassesThat().resideInAnyPackage("org.springframework..")
+    );
+```
+
+This allows you to:
+- Prevent new violations
+- Fix existing violations incrementally
+- Track progress over time
+
+### 5. Exclude Generated Code
+
+```java
+@AnalyzeClasses(
+    packages = "com.company.project",
+    importOptions = {
+        ImportOption.DoNotIncludeTests.class,
+        ImportOption.DoNotIncludeJars.class
+    }
+)
+```
+
+Or create custom import options:
+
+```java
+public class DoNotIncludeGenerated implements ImportOption {
+    @Override
+    public boolean includes(Location location) {
+        return !location.contains("/generated/");
+    }
+}
+```
+
+---
+
+## CI/CD Integration
+
+### Maven Integration
+
+ArchUnit tests run automatically with:
+```bash
+mvn clean verify
+```
+
+### Gradle Integration
+
+```bash
+./gradlew test
+```
+
+### GitHub Actions Example
+
+```yaml
+name: Architecture Tests
+
+on: [push, pull_request]
+
+jobs:
+  architecture-tests:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+      - name: Set up JDK 17
+        uses: actions/setup-java@v3
+        with:
+          java-version: '17'
+          distribution: 'temurin'
+      - name: Run Architecture Tests
+        run: mvn test -Dtest=*ArchitectureTest
+```
+
+### GitLab CI Example
+
+```yaml
+architecture-tests:
+  stage: test
+  script:
+    - mvn test -Dtest=*ArchitectureTest
+  only:
+    - merge_requests
+    - main
+```
+
+---
+
+## Common Pitfalls and Solutions
+
+### Pitfall 1: Tests Failing for Test Code
+
+**Problem:** ArchUnit analyzes test code and finds violations
+
+**Solution:** Exclude tests from analysis
+```java
+@AnalyzeClasses(
+    packages = "com.company.project",
+    importOptions = ImportOption.DoNotIncludeTests.class
+)
+```
+
+### Pitfall 2: Too Many Rules at Once
+
+**Problem:** Adding all rules to legacy codebase causes hundreds of failures
+
+**Solution:** Use `FreezingArchRule` or add rules incrementally
+```java
+@ArchTest
+static final ArchRule frozen_rule =
+    FreezingArchRule.freeze(your_rule_here);
+```
+
+### Pitfall 3: False Positives from Generated Code
+
+**Problem:** Generated classes (e.g., from Lombok, MapStruct) violate rules
+
+**Solution:** Create custom import option to exclude generated code
+```java
+public class ExcludeGenerated implements ImportOption {
+    @Override
+    public boolean includes(Location location) {
+        return !location.contains("/generated/") &&
+               !location.contains("/lombok/");
+    }
+}
+```
+
+### Pitfall 4: Package Patterns Not Matching
+
+**Problem:** Rule doesn't catch violations due to incorrect package pattern
+
+**Solution:** Use `..` for any number of subpackages
+```java
+// ❌ Wrong - matches only direct children
+"com.company.project.domain"
+
+// ✅ Right - matches any depth
+"..domain.."
+```
+
+### Pitfall 5: Slow Test Execution
+
+**Problem:** ArchUnit tests take too long to run
+
+**Solution:**
+- Cache imported classes
+- Split into multiple test classes
+- Run architecture tests separately in CI pipeline
+
+---
+
+## Additional Resources
+
+- **ArchUnit User Guide:** https://www.archunit.org/userguide/html/000_Index.html
+- **ArchUnit Examples:** https://github.com/TNG/ArchUnit-Examples
+- **Domain-Centric Architecture:** [./README.md](./README.md)
+- **Architecture Reference Guide:** [./architecture-reference-guide.md](./architecture-reference-guide.md)
+
+---
+
+**Next Steps:**
+1. Add ArchUnit dependency to your project
+2. Create basic `ArchitectureTest` class
+3. Start with layer dependency rules
+4. Run tests and fix violations
+5. Add more rules incrementally
+6. Integrate into CI/CD pipeline
+
+**Remember:** ArchUnit is a tool to help enforce architectural decisions. The rules should reflect your team's agreed-upon architecture, not arbitrary constraints.

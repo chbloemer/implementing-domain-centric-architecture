@@ -129,6 +129,83 @@ This document describes the core Domain-Centric Architecture patterns and princi
 
 ### Application Layer (Use Cases / Application Business Rules)
 
+#### Use Case Pattern with Input Ports
+
+The application layer organizes business operations using a structured **Use Case pattern** where each use case is isolated in its own folder with dedicated Input/Output models:
+
+**Pattern Structure:**
+- **Use Case** - Implements business operation (orchestrates domain objects)
+- **Input Port** - Interface defining use case contract (`extends InputPort<INPUT, OUTPUT>`)
+- **Command/Query** - Input model (Command for writes, Query for reads)
+- **Response** - Output model (standardized return type)
+- **Output Port** - Interface for infrastructure needs (repositories, gateways, publishers)
+
+**Organization:**
+```
+application/
+├── {usecasename}/          # e.g., createorder, findorder, cancelorder
+│   ├── *InputPort.java     # Interface: public interface CreateOrderInputPort extends InputPort<CreateOrderCommand, CreateOrderResponse>
+│   ├── *UseCase.java       # Implementation: @Service public class CreateOrderUseCase implements CreateOrderInputPort
+│   ├── *Command.java       # Input model (for write operations)
+│   │   OR *Query.java      # Input model (for read operations)
+│   └── *Response.java      # Output model
+└── shared/                 # Shared output ports
+    └── *Repository.java    # Repository interfaces, DomainEventPublisher, etc.
+```
+
+**Benefits:**
+- ✅ **Single Responsibility** - One use case class per business operation
+- ✅ **Explicit Contracts** - Clear input/output via InputPort interface
+- ✅ **Self-Contained** - All related files grouped together
+- ✅ **Interface Segregation** - Adapters inject only the specific ports they need
+- ✅ **Better Hexagonal Alignment** - Input Ports define the application's external API
+
+**Example:**
+```java
+// Input Port Interface (defines contract)
+public interface CreateOrderInputPort extends InputPort<CreateOrderCommand, CreateOrderResponse> {
+    CreateOrderResponse execute(CreateOrderCommand command);
+}
+
+// Use Case Implementation (orchestrates domain)
+@Service
+public class CreateOrderUseCase implements CreateOrderInputPort {
+
+    private final OrderRepository orderRepository;  // Output Port
+    private final DomainEventPublisher eventPublisher;  // Output Port
+
+    @Override
+    public CreateOrderResponse execute(CreateOrderCommand command) {
+        // 1. Convert DTO to domain
+        Order order = Order.create(command.customerId(), command.items());
+
+        // 2. Business logic (in domain)
+        order.validate();
+
+        // 3. Persist via output port
+        orderRepository.save(order);
+
+        // 4. Publish events via output port
+        eventPublisher.publish(order.getDomainEvents());
+
+        // 5. Convert domain to DTO
+        return CreateOrderResponse.from(order);
+    }
+}
+
+// Input Model (Command)
+public record CreateOrderCommand(CustomerId customerId, List<OrderItemDto> items) {}
+
+// Output Model (Response)
+public record CreateOrderResponse(OrderId orderId, Money total, OrderStatus status) {
+    public static CreateOrderResponse from(Order order) {
+        return new CreateOrderResponse(order.getId(), order.getTotal(), order.getStatus());
+    }
+}
+```
+
+#### Application Layer Components
+
 - **Use Case / Application Service** - Orchestrates business operations
 - **Input Port** - Interface defining use case entry point
 - **Output Port** - Interface for infrastructure needs
@@ -176,9 +253,115 @@ This document describes the core Domain-Centric Architecture patterns and princi
 
 - **Context Map** - Relationships between bounded contexts
 - **Anti-Corruption Layer** - Protection from external models
-- **Shared Kernel** - Shared code between contexts
+- **Shared Kernel** - Shared code between contexts (see detailed structure below)
 - **Open Host Service** - Published integration API
 - **Published Language** - Well-documented shared protocol
+
+#### Shared Kernel Pattern (Strategic DDD)
+
+The **Shared Kernel** contains code shared across ALL bounded contexts within your application. It should be kept minimal and requires coordination between teams.
+
+**Structure:**
+```
+sharedkernel/
+├── domain/
+│   ├── marker/                    # DDD marker interfaces (define patterns)
+│   │   ├── AggregateRoot.java     # Interface for aggregate roots
+│   │   ├── Entity.java            # Interface for entities
+│   │   ├── Value.java             # Marker for value objects
+│   │   ├── DomainEvent.java       # Interface for domain events
+│   │   ├── DomainService.java     # Marker for domain services
+│   │   ├── Factory.java           # Marker for factories
+│   │   └── Specification.java     # Interface for specifications
+│   ├── common/                    # Shared value objects (used by multiple contexts)
+│   │   ├── Money.java             # Universal money type
+│   │   ├── Address.java           # Common address value object
+│   │   └── EmailAddress.java      # Common email value object
+│   └── exception/                 # Base domain exceptions
+│       ├── DomainException.java
+│       └── BusinessRuleViolationException.java
+└── application/
+    └── port/                      # Shared port interfaces (base contracts)
+        ├── InputPort.java         # Base interface: InputPort<INPUT, OUTPUT>
+        ├── OutputPort.java        # Marker for output ports
+        ├── Repository.java        # Base repository interface
+        └── DomainEventPublisher.java  # Base event publisher interface
+```
+
+**What Belongs in Shared Kernel:**
+
+✅ **Include:**
+- **Universal value objects** used by multiple contexts (Money, common IDs if truly shared)
+- **DDD marker interfaces** that define your architectural patterns
+- **Base port interfaces** (`InputPort<INPUT, OUTPUT>`, `OutputPort`)
+- **Base domain exceptions** (DomainException, BusinessRuleViolationException)
+- **Cross-cutting domain concepts** that have identical meaning everywhere
+
+❌ **Exclude:**
+- **Aggregates** - These belong to specific bounded contexts
+- **Business logic** - Should live in context-specific domain layers
+- **Context-specific value objects** - Only truly universal ones belong here
+- **Use case implementations** - Belong to specific contexts
+- **Adapters** - Never shared between contexts
+
+**Guidelines:**
+- Keep the Shared Kernel **as small as possible**
+- Changes to Shared Kernel affect all contexts - coordinate carefully
+- Only include code that has **identical meaning** across all contexts
+- When in doubt, duplicate rather than share
+- Use versioning if Shared Kernel becomes a separate module
+
+**Example - Marker Interface:**
+```java
+// sharedkernel/domain/marker/AggregateRoot.java
+public interface AggregateRoot<ID> extends Entity<ID> {
+    // Marker interface - identifies aggregate roots for all contexts
+}
+
+// sharedkernel/domain/marker/Entity.java
+public interface Entity<ID> {
+    ID getId();
+    default boolean isSameAs(Entity<ID> other) {
+        return this.getId().equals(other.getId());
+    }
+}
+```
+
+**Example - Shared Value Object:**
+```java
+// sharedkernel/domain/common/Money.java
+public record Money(BigDecimal amount, Currency currency) implements Value {
+
+    public Money {
+        Objects.requireNonNull(amount);
+        Objects.requireNonNull(currency);
+        if (amount.scale() > 2) {
+            throw new IllegalArgumentException("Money cannot have more than 2 decimal places");
+        }
+    }
+
+    public Money add(Money other) {
+        if (!this.currency.equals(other.currency)) {
+            throw new IllegalArgumentException("Cannot add money with different currencies");
+        }
+        return new Money(this.amount.add(other.amount), this.currency);
+    }
+}
+```
+
+**Example - Base InputPort Interface:**
+```java
+// sharedkernel/application/port/InputPort.java
+public interface InputPort<INPUT, OUTPUT> {
+    OUTPUT execute(INPUT input);
+}
+
+// Usage in a bounded context:
+// order/application/createorder/CreateOrderInputPort.java
+public interface CreateOrderInputPort extends InputPort<CreateOrderCommand, CreateOrderResponse> {
+    // Inherits execute() method with specific types
+}
+```
 
 ## RULES
 
@@ -476,8 +659,12 @@ com.company.project/
 │                            Framework-specific configuration and cross-cutting concerns
 │                            Spring, JPA, Kafka config, Logging, Security
 │
-├── sharedkernel/            [SHARED ACROSS CONTEXTS]
-│                            Common domain concepts and marker interfaces
+├── sharedkernel/            [SHARED ACROSS ALL CONTEXTS - Keep Minimal]
+│   ├── domain/              DDD marker interfaces (AggregateRoot, Entity, Value, etc.)
+│   │                        Universal value objects (Money, Address, etc.)
+│   │                        Base domain exceptions
+│   └── application/port/    Base port interfaces (InputPort<INPUT, OUTPUT>, OutputPort)
+│                            Shared repository and publisher interfaces
 │
 └── infrastructure/          [GLOBAL INFRASTRUCTURE]
                              Application-wide configuration and setup
@@ -674,33 +861,44 @@ com.company.project
 │       ├── incoming
 │       └── outgoing
 │
-├── sharedkernel (DDD marker interfaces and common domain)
+├── sharedkernel (Shared across ALL bounded contexts - keep minimal)
 │   ├── domain
-│   │   ├── marker
+│   │   ├── marker (DDD pattern interfaces)
 │   │   │   ├── AggregateRoot.java
 │   │   │   │   public interface AggregateRoot<ID> extends Entity<ID> {}
 │   │   │   ├── Entity.java
 │   │   │   │   public interface Entity<ID> { ID getId(); }
-│   │   │   ├── ValueObject.java
-│   │   │   │   public interface ValueObject {}
+│   │   │   ├── Value.java
+│   │   │   │   public interface Value {}  // Marker for value objects
 │   │   │   ├── DomainEvent.java
 │   │   │   │   public interface DomainEvent { Instant occurredOn(); }
-│   │   │   └── DomainService.java
-│   │   │       public interface DomainService {}
-│   │   ├── common
+│   │   │   ├── DomainService.java
+│   │   │   │   public interface DomainService {}
+│   │   │   ├── Factory.java
+│   │   │   │   public interface Factory<T> {}
+│   │   │   └── Specification.java
+│   │   │       public interface Specification<T> { boolean isSatisfiedBy(T t); }
+│   │   ├── common (Universal value objects)
 │   │   │   ├── Money.java
-│   │   │   └── Address.java
-│   │   └── exception
+│   │   │   ├── Address.java
+│   │   │   └── EmailAddress.java
+│   │   └── exception (Base domain exceptions)
 │   │       ├── DomainException.java
 │   │       └── BusinessRuleViolationException.java
 │   └── application
-│       └── marker
+│       └── port (Base port interfaces)
 │           ├── InputPort.java
 │           │   public interface InputPort<INPUT, OUTPUT> {
 │           │     OUTPUT execute(INPUT input);
 │           │   }
-│           └── OutputPort.java
-│               public interface OutputPort {}
+│           ├── OutputPort.java
+│           │   public interface OutputPort {}  // Marker interface
+│           ├── Repository.java
+│           │   public interface Repository<T, ID> extends OutputPort {}
+│           └── DomainEventPublisher.java
+│               public interface DomainEventPublisher extends OutputPort {
+│                 void publish(DomainEvent event);
+│               }
 │
 └── infrastructure (cross-cutting concerns)
     ├── configuration
