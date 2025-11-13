@@ -81,46 +81,65 @@ domain/
 
 **Dependencies**: Domain, Common
 
-**Example Structure (Modern Use Case Pattern)**:
+**Recommended Structure (Self-Contained Use Case Pattern)**:
 ```
 application/
-├── {usecasename}/          # Each use case in own folder (e.g., createorder/, cancelorder/)
-│   ├── *InputPort.java     # Interface: extends InputPort<COMMAND, RESPONSE>
-│   ├── *UseCase.java       # Implementation: implements InputPort
-│   ├── *Command.java       # Input model (for write operations)
-│   │   OR *Query.java      # Input model (for read operations)
-│   └── *Response.java      # Output model
-└── shared/                 # Shared output ports
+├── createorder/            # Each use case in own folder - ALL related files together
+│   ├── CreateOrderInputPort.java     # Interface: extends InputPort<COMMAND, RESPONSE>
+│   ├── CreateOrderUseCase.java       # Implementation: implements InputPort
+│   ├── CreateOrderCommand.java       # Input model (Command for writes)
+│   └── CreateOrderResponse.java      # Output model
+├── findorder/              # Each use case in own folder - ALL related files together
+│   ├── FindOrderInputPort.java       # Interface: extends InputPort<QUERY, RESPONSE>
+│   ├── FindOrderUseCase.java         # Implementation: implements InputPort
+│   ├── OrderQuery.java               # Input model (Query for reads)
+│   └── OrderResponse.java            # Output model
+├── cancelorder/            # Each use case in own folder - ALL related files together
+│   ├── CancelOrderInputPort.java
+│   ├── CancelOrderUseCase.java
+│   ├── CancelOrderCommand.java
+│   └── CancelOrderResponse.java
+└── shared/                 # Shared output ports (used by multiple use cases)
     ├── OrderRepository.java
     ├── DomainEventPublisher.java
     └── PaymentGateway.java
 ```
 
-**Alternative Structure (Classic Port/Service Separation)**:
+**Key Characteristics:**
+- ✅ **High Cohesion** - InputPort interface + UseCase implementation + Command + Response all in one folder
+- ✅ **Self-Contained** - Everything for one use case is together
+- ✅ **Single Responsibility** - One folder = one business operation
+- ✅ **Easy Navigation** - Find all related files in one place
+- ✅ **Better Scalability** - Structure grows linearly with use cases
+- ✅ **Clear Dependencies** - Use case depends only on domain + shared output ports
+
+**Alternative Structure (Classic Port/Service Separation - Legacy Pattern)**:
 ```
 application/
 ├── port/
-│   ├── in/  (or "usecases")
-│   │   ├── CreateOrderInputPort.java
-│   │   ├── CancelOrderInputPort.java
+│   ├── in/
+│   │   ├── CreateOrderInputPort.java    # InputPort interfaces separate from implementations
 │   │   └── FindOrderInputPort.java
-│   └── out/  (or "spi")
-│       ├── OrderRepository.java
-│       ├── DomainEventPublisher.java
-│       └── PaymentGateway.java
-├── usecase/
-│   ├── CreateOrderUseCase.java
-│   └── CancelOrderUseCase.java
-└── dto/
-    ├── CreateOrderCommand.java
-    └── OrderResponse.java
+│   └── out/
+│       ├── OrderRepository.java         # Output ports in separate directory
+│       └── DomainEventPublisher.java
+└── usecase/
+    ├── createorder/
+    │   ├── CreateOrderUseCase.java      # Implementation separate from interface
+    │   ├── CreateOrderCommand.java
+    │   └── CreateOrderResponse.java
+    └── findorder/
+        ├── FindOrderUseCase.java
+        ├── OrderQuery.java
+        └── OrderResponse.java
 ```
 
-**Recommended Approach**: Use the **Modern Use Case Pattern** (first structure) for:
-- ✅ Better organization as application grows
-- ✅ Self-contained use cases (all related files together)
-- ✅ Single Responsibility - one folder per business operation
-- ✅ Easier navigation and maintenance
+**Why Self-Contained Pattern is Preferred:**
+- Interface and implementation belong together (same bounded context, same use case)
+- Reduces navigation between different directories
+- Makes refactoring easier (move one folder = move entire use case)
+- Aligns with "package by feature" principle
+- Better team collaboration (less merge conflicts)
 
 ### 3. Adapters Layer
 **Purpose**: Bridge between application and external systems
@@ -1161,8 +1180,8 @@ public class CartService {
 
 // ============ ORDER CONTEXT ============
 
-// order/adapter/out/persistence/OrderRepository.java
-package de.yourapp.order.adapter.out.persistence;
+// order/adapter/outgoing/persistence/OrderRepository.java
+package de.yourapp.order.adapter.outgoing.persistence;
 
 import de.yourapp.sharedkernel.common.annotation.AsyncInitialize;  // ← All contexts use it!
 import org.springframework.stereotype.Repository;

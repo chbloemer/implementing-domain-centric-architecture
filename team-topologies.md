@@ -244,9 +244,9 @@ Order Team owns Order Bounded Context
 ### API/Interface Ownership
 
 **Team API Responsibilities:**
-- **Synchronous APIs:** REST endpoints (in `adapter/in/web/`)
-- **Asynchronous APIs:** Integration Events (in `adapter/out/messaging/event/`)
-- **Domain APIs:** Input Ports (in `application/port/in/`)
+- **Synchronous APIs:** REST endpoints (in `adapter/incoming/web/`)
+- **Asynchronous APIs:** Integration Events (in `adapter/outgoing/messaging/event/`)
+- **Domain APIs:** Input Ports (in `application/{usecasename}/`)
 
 **API Management:**
 - Team owns and versions their public APIs

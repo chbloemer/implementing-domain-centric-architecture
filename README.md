@@ -715,48 +715,44 @@ com.company.project
 │   │       ├── OrderNotFoundException.java
 │   │       └── InvalidOrderStateException.java
 │   │
-│   ├── application (use-case focused)
-│   │   ├── port
-│   │   │   ├── in (INPUT PORTS - entry points to application)
-│   │   │   │   ├── CreateOrderInputPort.java
-│   │   │   │   │   interface CreateOrderInputPort extends InputPort<CreateOrderCommand, CreateOrderResponse> {}
-│   │   │   │   ├── FindOrderInputPort.java
-│   │   │   │   │   interface FindOrderInputPort extends InputPort<OrderQuery, OrderResponse> {}
-│   │   │   │   ├── CancelOrderInputPort.java
-│   │   │   │   │   interface CancelOrderInputPort extends InputPort<CancelOrderCommand, CancelOrderResponse> {}
-│   │   │   │   └── UpdateOrderInputPort.java
-│   │   │   │       interface UpdateOrderInputPort extends InputPort<UpdateOrderCommand, UpdateOrderResponse> {}
-│   │   │   │
-│   │   │   └── out (OUTPUT PORTS - dependencies on infrastructure)
-│   │   │       ├── OrderRepository.java
-│   │   │       ├── PaymentGateway.java
-│   │   │       ├── InventoryService.java
-│   │   │       └── DomainEventPublisher.java
+│   ├── application (use-case focused - each use case self-contained)
+│   │   ├── createorder (use case folder - contains ALL related files)
+│   │   │   ├── CreateOrderInputPort.java
+│   │   │   │   interface CreateOrderInputPort extends InputPort<CreateOrderCommand, CreateOrderResponse> {}
+│   │   │   ├── CreateOrderUseCase.java
+│   │   │   │   @Service class CreateOrderUseCase implements CreateOrderInputPort { }
+│   │   │   ├── CreateOrderCommand.java
+│   │   │   └── CreateOrderResponse.java
 │   │   │
-│   │   └── usecase
-│   │       ├── createorder (use case)
-│   │       │   ├── CreateOrderUseCase.java
-│   │       │   │   class CreateOrderUseCase implements CreateOrderInputPort { }
-│   │       │   ├── CreateOrderCommand.java
-│   │       │   └── CreateOrderResponse.java
-│   │       │
-│   │       ├── findorder (use case)
-│   │       │   ├── FindOrderUseCase.java
-│   │       │   │   class FindOrderUseCase implements FindOrderInputPort { }
-│   │       │   ├── OrderQuery.java
-│   │       │   └── OrderResponse.java
-│   │       │
-│   │       ├── cancelorder (use case)
-│   │       │   ├── CancelOrderUseCase.java
-│   │       │   │   class CancelOrderUseCase implements CancelOrderInputPort { }
-│   │       │   ├── CancelOrderCommand.java
-│   │       │   └── CancelOrderResponse.java
-│   │       │
-│   │       └── updateorder (use case)
-│   │           ├── UpdateOrderUseCase.java
-│   │           │   class UpdateOrderUseCase implements UpdateOrderInputPort { }
-│   │           ├── UpdateOrderCommand.java
-│   │           └── UpdateOrderResponse.java
+│   │   ├── findorder (use case folder - contains ALL related files)
+│   │   │   ├── FindOrderInputPort.java
+│   │   │   │   interface FindOrderInputPort extends InputPort<OrderQuery, OrderResponse> {}
+│   │   │   ├── FindOrderUseCase.java
+│   │   │   │   @Service class FindOrderUseCase implements FindOrderInputPort { }
+│   │   │   ├── OrderQuery.java
+│   │   │   └── OrderResponse.java
+│   │   │
+│   │   ├── cancelorder (use case folder - contains ALL related files)
+│   │   │   ├── CancelOrderInputPort.java
+│   │   │   │   interface CancelOrderInputPort extends InputPort<CancelOrderCommand, CancelOrderResponse> {}
+│   │   │   ├── CancelOrderUseCase.java
+│   │   │   │   @Service class CancelOrderUseCase implements CancelOrderInputPort { }
+│   │   │   ├── CancelOrderCommand.java
+│   │   │   └── CancelOrderResponse.java
+│   │   │
+│   │   ├── updateorder (use case folder - contains ALL related files)
+│   │   │   ├── UpdateOrderInputPort.java
+│   │   │   │   interface UpdateOrderInputPort extends InputPort<UpdateOrderCommand, UpdateOrderResponse> {}
+│   │   │   ├── UpdateOrderUseCase.java
+│   │   │   │   @Service class UpdateOrderUseCase implements UpdateOrderInputPort { }
+│   │   │   ├── UpdateOrderCommand.java
+│   │   │   └── UpdateOrderResponse.java
+│   │   │
+│   │   └── shared (SHARED OUTPUT PORTS - infrastructure dependencies)
+│   │       ├── OrderRepository.java (Output Port)
+│   │       ├── PaymentGateway.java (Output Port)
+│   │       ├── InventoryService.java (Output Port)
+│   │       └── DomainEventPublisher.java (Output Port)
 │   │
 │   └── adapter
 │       ├── incoming (INCOMING ADAPTERS - call input ports)
@@ -803,30 +799,24 @@ com.company.project
 ├── customer (bounded context)
 │   ├── domain
 │   ├── application
-│   │   ├── port
-│   │   │   ├── in
-│   │   │   │   ├── RegisterCustomerInputPort.java
-│   │   │   │   │   interface RegisterCustomerInputPort extends InputPort<RegisterCustomerCommand, RegisterCustomerResponse> {}
-│   │   │   │   ├── UpdateCustomerInputPort.java
-│   │   │   │   │   interface UpdateCustomerInputPort extends InputPort<UpdateCustomerCommand, UpdateCustomerResponse> {}
-│   │   │   │   └── FindCustomerInputPort.java
-│   │   │   │       interface FindCustomerInputPort extends InputPort<CustomerQuery, CustomerResponse> {}
-│   │   │   └── out
-│   │   │       ├── CustomerRepository.java
-│   │   │       └── EmailService.java
-│   │   └── usecase
-│   │       ├── registercustomer
-│   │       │   ├── RegisterCustomerUseCase.java
-│   │       │   ├── RegisterCustomerCommand.java
-│   │       │   └── RegisterCustomerResponse.java
-│   │       ├── updatecustomer
-│   │       │   ├── UpdateCustomerUseCase.java
-│   │       │   ├── UpdateCustomerCommand.java
-│   │       │   └── UpdateCustomerResponse.java
-│   │       └── findcustomer
-│   │           ├── FindCustomerUseCase.java
-│   │           ├── CustomerQuery.java
-│   │           └── CustomerResponse.java
+│   │   ├── registercustomer
+│   │   │   ├── RegisterCustomerInputPort.java
+│   │   │   ├── RegisterCustomerUseCase.java
+│   │   │   ├── RegisterCustomerCommand.java
+│   │   │   └── RegisterCustomerResponse.java
+│   │   ├── updatecustomer
+│   │   │   ├── UpdateCustomerInputPort.java
+│   │   │   ├── UpdateCustomerUseCase.java
+│   │   │   ├── UpdateCustomerCommand.java
+│   │   │   └── UpdateCustomerResponse.java
+│   │   ├── findcustomer
+│   │   │   ├── FindCustomerInputPort.java
+│   │   │   ├── FindCustomerUseCase.java
+│   │   │   ├── CustomerQuery.java
+│   │   │   └── CustomerResponse.java
+│   │   └── shared
+│   │       ├── CustomerRepository.java
+│   │       └── EmailService.java
 │   └── adapter
 │       ├── incoming
 │       └── outgoing
@@ -834,29 +824,23 @@ com.company.project
 ├── inventory (bounded context)
 │   ├── domain
 │   ├── application
-│   │   ├── port
-│   │   │   ├── in
-│   │   │   │   ├── ReserveStockInputPort.java
-│   │   │   │   │   interface ReserveStockInputPort extends InputPort<ReserveStockCommand, ReserveStockResponse> {}
-│   │   │   │   ├── ReleaseStockInputPort.java
-│   │   │   │   │   interface ReleaseStockInputPort extends InputPort<ReleaseStockCommand, ReleaseStockResponse> {}
-│   │   │   │   └── CheckAvailabilityInputPort.java
-│   │   │   │       interface CheckAvailabilityInputPort extends InputPort<AvailabilityQuery, AvailabilityResponse> {}
-│   │   │   └── out
-│   │   │       └── StockRepository.java
-│   │   └── usecase
-│   │       ├── reservestock
-│   │       │   ├── ReserveStockUseCase.java
-│   │       │   ├── ReserveStockCommand.java
-│   │       │   └── ReserveStockResponse.java
-│   │       ├── releasestock
-│   │       │   ├── ReleaseStockUseCase.java
-│   │       │   ├── ReleaseStockCommand.java
-│   │       │   └── ReleaseStockResponse.java
-│   │       └── checkavailability
-│   │           ├── CheckAvailabilityUseCase.java
-│   │           ├── AvailabilityQuery.java
-│   │           └── AvailabilityResponse.java
+│   │   ├── reservestock
+│   │   │   ├── ReserveStockInputPort.java
+│   │   │   ├── ReserveStockUseCase.java
+│   │   │   ├── ReserveStockCommand.java
+│   │   │   └── ReserveStockResponse.java
+│   │   ├── releasestock
+│   │   │   ├── ReleaseStockInputPort.java
+│   │   │   ├── ReleaseStockUseCase.java
+│   │   │   ├── ReleaseStockCommand.java
+│   │   │   └── ReleaseStockResponse.java
+│   │   ├── checkavailability
+│   │   │   ├── CheckAvailabilityInputPort.java
+│   │   │   ├── CheckAvailabilityUseCase.java
+│   │   │   ├── AvailabilityQuery.java
+│   │   │   └── AvailabilityResponse.java
+│   │   └── shared
+│   │       └── StockRepository.java
 │   └── adapter
 │       ├── incoming
 │       └── outgoing
@@ -924,29 +908,44 @@ This example shows how a bounded context's structure naturally evolves as comple
 
 ---
 
-**Port Symmetry - Key Characteristics:**
+**Use Case Organization - Self-Contained Pattern:**
 
 ```
 APPLICATION LAYER
-├── port/                          (INTERFACES - Boundaries)
-│   ├── in/  (INPUT PORTS)          ←─── Called by Input Adapters
-│   │   - Interfaces                     (Controllers, Event Consumers, CLI)
-│   │   - Define use case entry points
-│   │   - Technology-agnostic
-│   │
-│   └── out/ (OUTPUT PORTS)         ───→ Implemented by Output Adapters
-│       - Interfaces                     (Persistence, Payment, Messaging)
-│       - Define infrastructure needs
-│       - Technology-agnostic
+├── createorder/                   (USE CASE - All related files together)
+│   ├── CreateOrderInputPort.java      ← Input Port Interface
+│   │   interface CreateOrderInputPort extends InputPort<CreateOrderCommand, CreateOrderResponse>
+│   ├── CreateOrderUseCase.java        ← Use Case Implementation
+│   │   @Service class CreateOrderUseCase implements CreateOrderInputPort
+│   ├── CreateOrderCommand.java        ← Input Model (Command for writes)
+│   └── CreateOrderResponse.java       ← Output Model
 │
-└── usecase/                       (IMPLEMENTATIONS - Use Cases)
-    ├── createorder/
-    │   - CreateOrderUseCase        (implements InputPort, uses OutputPorts)
-    │   - CreateOrderCommand
-    │   - CreateOrderResponse
-    ├── findorder/
-    └── cancelorder/
+├── findorder/                     (USE CASE - All related files together)
+│   ├── FindOrderInputPort.java        ← Input Port Interface
+│   ├── FindOrderUseCase.java          ← Use Case Implementation
+│   ├── OrderQuery.java                ← Input Model (Query for reads)
+│   └── OrderResponse.java             ← Output Model
+│
+├── cancelorder/                   (USE CASE - All related files together)
+│   ├── CancelOrderInputPort.java      ← Input Port Interface
+│   ├── CancelOrderUseCase.java        ← Use Case Implementation
+│   ├── CancelOrderCommand.java        ← Input Model
+│   └── CancelOrderResponse.java       ← Output Model
+│
+└── shared/                        (SHARED OUTPUT PORTS)
+    ├── OrderRepository.java           ← Output Port (used by multiple use cases)
+    ├── PaymentGateway.java            ← Output Port
+    ├── InventoryService.java          ← Output Port
+    └── DomainEventPublisher.java      ← Output Port
 ```
+
+**Key Principles:**
+
+1. **Each use case is self-contained** in its own folder with ALL related files
+2. **InputPort interface** lives WITH the use case, not in a separate port/in/ directory
+3. **UseCase implementation** lives WITH the InputPort in the same folder
+4. **Command/Query and Response** models live WITH the use case
+5. **Output Ports** (repositories, gateways) are shared across use cases in `shared/` directory
 
 **Naming Convention:**
 - Input Ports: `*InputPort extends InputPort<INPUT, OUTPUT>` (e.g., `CreateOrderInputPort extends InputPort<CreateOrderCommand, CreateOrderResponse>`)
@@ -958,16 +957,15 @@ APPLICATION LAYER
 - Adapters: `*Adapter` (e.g., `OrderRepositoryAdapter`, `PaymentGatewayAdapter`)
 
 **Benefits:**
-- ✅ Perfect symmetry: `port/` (interfaces) and `usecase/` (implementations) at same level
-- ✅ Clear separation: Contracts (`port/`) vs Implementations (`usecase/`)
-- ✅ Clear hexagonal boundaries on both sides
-- ✅ Use cases self-contained and grouped under `usecase/`
-- ✅ All ports (input & output) easy to find in one place (`port/`)
-- ✅ Use cases implement input ports and use output ports
-- ✅ Adapters clearly separated as `adapter/incoming` and `adapter/outgoing`
-- ✅ Consistent naming with "UseCase" suffix for implementations
-- ✅ Better scalability: clear structure as application grows
-- ✅ Explicit organization: immediately clear what each package contains
+- ✅ **High Cohesion** - All files for one use case are together
+- ✅ **Single Responsibility** - One folder = one business operation
+- ✅ **Easy Navigation** - Find everything related to a use case in one place
+- ✅ **Better Scalability** - Structure grows linearly with use cases
+- ✅ **Minimal Coupling** - Use cases are independent, share only via output ports
+- ✅ **Clear Dependencies** - Use case depends on domain + shared output ports only
+- ✅ **Adapters clearly separated** - `adapter/incoming` and `adapter/outgoing`
+- ✅ **Self-documenting** - Folder name = business operation name
+- ✅ **Team-friendly** - Different developers can work on different use cases independently
 
 
 ## DEPENDENCY STRUCTURE

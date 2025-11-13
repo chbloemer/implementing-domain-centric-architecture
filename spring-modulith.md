@@ -658,17 +658,27 @@ com.company.ecommerce
 │       │   └── event
 │       │       └── OrderCreated.java (Domain Event)
 │       ├── application
-│       │   ├── port
-│       │   │   ├── in
-│       │   │   └── out
-│       │   └── usecase
+│       │   ├── createorder
+│       │   │   ├── CreateOrderInputPort.java
+│       │   │   ├── CreateOrderUseCase.java
+│       │   │   ├── CreateOrderCommand.java
+│       │   │   └── CreateOrderResponse.java
+│       │   ├── findorder
+│       │   ├── cancelorder
+│       │   └── shared
+│       │       ├── OrderRepository.java
+│       │       └── DomainEventPublisher.java
 │       ├── adapter
-│       │   ├── in
+│       │   ├── incoming
 │       │   │   ├── web
-│       │   │   └── events
-│       │   └── out
+│       │   │   │   └── OrderController.java
+│       │   │   └── event
+│       │   │       └── OrderEventConsumer.java
+│       │   └── outgoing
 │       │       ├── persistence
+│       │       │   └── OrderRepositoryAdapter.java
 │       │       └── payment
+│       │           └── PaymentGatewayAdapter.java
 │       └── config
 │           └── OrderModuleConfiguration.java
 ```
@@ -758,7 +768,7 @@ com.company.ecommerce.order/ (module)
 **Triggers for Refactoring:**
 - **>10 files in internal/** suggests subdivision
 - **>3 domain events** suggests `internal/domain/event/` package
-- **>2 adapter types** suggests `internal/adapter/in/` and `/out/` packages
+- **>2 adapter types** suggests `internal/adapter/incoming/` and `/outgoing/` packages
 
 **Structure:**
 ```
@@ -777,15 +787,15 @@ com.company.ecommerce.order/
     │   └── service/
     │       └── PricingService.java
     ├── application/
-    │   ├── port/
-    │   │   ├── in/
-    │   │   └── out/
-    │   └── usecase/
+    │   ├── createorder/
+    │   ├── findorder/
+    │   ├── cancelorder/
+    │   └── shared/
     ├── adapter/
-    │   ├── in/
+    │   ├── incoming/
     │   │   ├── web/
     │   │   └── event/
-    │   └── out/
+    │   └── outgoing/
     │       ├── persistence/
     │       └── payment/
     └── config/
