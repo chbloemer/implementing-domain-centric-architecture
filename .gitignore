@@ -3,4 +3,4 @@ slides/node_modules
 slides/dist
 .serena
 bin/
-.claude/setting.local.json
+.claude/settings.local.json

@@ -103,10 +103,15 @@ For detailed patterns and rules, continue reading below. For specific topics, se
 
 This document describes the core Domain-Centric Architecture patterns and principles. For specific topics, see:
 
+### Reference Implementation
+- **[AI Architecture Sample](https://github.com/chbloemer/ai-architecture-sample)** - Complete reference implementation in Java/Spring Boot demonstrating all concepts in practice
+
+### Supplementary Documentation
 - **[Clean Architecture Comparison](./clean-architecture-comparison.md)** - Differences from Clean Architecture and when to use each
 - **[Deployment Patterns](./deployment-patterns.md)** - Self-Contained Systems, service decomposition, and deployment strategies
 - **[Spring Modulith Implementation](./spring-modulith.md)** - Practical implementation using Spring Modulith framework
 - **[Team Topologies Integration](./team-topologies.md)** - Organizational patterns and team structure alignment
+- **[ArchUnit Governance](./archunit-governance.md)** - Automated architecture testing and enforcement
 
 ## ELEMENTS
 
@@ -135,7 +140,7 @@ The application layer organizes business operations using a structured **Use Cas
 
 **Pattern Structure:**
 - **Use Case** - Implements business operation (orchestrates domain objects)
-- **Input Port** - Interface defining use case contract (`extends InputPort<INPUT, OUTPUT>`)
+- **Input Port** - Interface defining use case contract (`extends UseCase<INPUT, OUTPUT>`)
 - **Command/Query** - Input model (Command for writes, Query for reads)
 - **Response** - Output model (standardized return type)
 - **Output Port** - Interface for infrastructure needs (repositories, gateways, publishers)
@@ -143,8 +148,8 @@ The application layer organizes business operations using a structured **Use Cas
 **Organization:**
 ```
 application/
-├── {usecasename}/          # e.g., createorder, findorder, cancelorder
-│   ├── *InputPort.java     # Interface: public interface CreateOrderInputPort extends InputPort<CreateOrderCommand, CreateOrderResponse>
+├── {usecasename}/          # e.g., createorder, findorder, cancelorder (lowercase)
+│   ├── *InputPort.java     # Interface: public interface CreateOrderInputPort extends UseCase<CreateOrderCommand, CreateOrderResponse>
 │   ├── *UseCase.java       # Implementation: @Service public class CreateOrderUseCase implements CreateOrderInputPort
 │   ├── *Command.java       # Input model (for write operations)
 │   │   OR *Query.java      # Input model (for read operations)
@@ -152,6 +157,8 @@ application/
 └── shared/                 # Shared output ports
     └── *Repository.java    # Repository interfaces, DomainEventPublisher, etc.
 ```
+
+> **Note:** Use case folder names are **lowercase** (e.g., `createorder`, `additemtocart`, `getproductbyid`), while the files inside use **PascalCase** (e.g., `CreateOrderInputPort.java`, `CreateOrderUseCase.java`).
 
 **Benefits:**
 - ✅ **Single Responsibility** - One use case class per business operation
@@ -163,7 +170,7 @@ application/
 **Example:**
 ```java
 // Input Port Interface (defines contract)
-public interface CreateOrderInputPort extends InputPort<CreateOrderCommand, CreateOrderResponse> {
+public interface CreateOrderInputPort extends UseCase<CreateOrderCommand, CreateOrderResponse> {
     CreateOrderResponse execute(CreateOrderCommand command);
 }
 
@@ -267,34 +274,41 @@ sharedkernel/
 ├── domain/
 │   ├── marker/                    # DDD marker interfaces (define patterns)
 │   │   ├── AggregateRoot.java     # Interface for aggregate roots
+│   │   ├── BaseAggregateRoot.java # Abstract base implementation
 │   │   ├── Entity.java            # Interface for entities
+│   │   ├── Id.java                # Base interface for identifiers
 │   │   ├── Value.java             # Marker for value objects
 │   │   ├── DomainEvent.java       # Interface for domain events
+│   │   ├── IntegrationEvent.java  # Interface for integration events
 │   │   ├── DomainService.java     # Marker for domain services
 │   │   ├── Factory.java           # Marker for factories
 │   │   └── Specification.java     # Interface for specifications
 │   ├── common/                    # Shared value objects (used by multiple contexts)
 │   │   ├── Money.java             # Universal money type
-│   │   ├── Address.java           # Common address value object
-│   │   └── EmailAddress.java      # Common email value object
-│   └── exception/                 # Base domain exceptions
-│       ├── DomainException.java
-│       └── BusinessRuleViolationException.java
+│   │   ├── Price.java             # Common price value object
+│   │   └── ProductId.java         # Example shared identifier
+│   └── spec/                      # Specification pattern implementations
+│       ├── CompositeSpecification.java
+│       ├── AndSpecification.java
+│       ├── OrSpecification.java
+│       ├── NotSpecification.java
+│       └── SpecificationVisitor.java
 └── application/
     └── port/                      # Shared port interfaces (base contracts)
-        ├── InputPort.java         # Base interface: InputPort<INPUT, OUTPUT>
-        ├── OutputPort.java        # Marker for output ports
+        ├── UseCase.java           # Base interface: UseCase<INPUT, OUTPUT>
         ├── Repository.java        # Base repository interface
         └── DomainEventPublisher.java  # Base event publisher interface
 ```
 
+> **Note:** The reference implementation at [ai-architecture-sample](https://github.com/chbloemer/ai-architecture-sample) uses `UseCase<INPUT, OUTPUT>` as the base interface, not `InputPort<INPUT, OUTPUT>`. Both names are valid - choose based on your team's preference.
+
 **What Belongs in Shared Kernel:**
 
 ✅ **Include:**
-- **Universal value objects** used by multiple contexts (Money, common IDs if truly shared)
-- **DDD marker interfaces** that define your architectural patterns
-- **Base port interfaces** (`InputPort<INPUT, OUTPUT>`, `OutputPort`)
-- **Base domain exceptions** (DomainException, BusinessRuleViolationException)
+- **Universal value objects** used by multiple contexts (Money, Price, shared IDs)
+- **DDD marker interfaces** that define your architectural patterns (Entity, AggregateRoot, Value, etc.)
+- **Base port interfaces** (`UseCase<INPUT, OUTPUT>`, `Repository`, `DomainEventPublisher`)
+- **Specification pattern implementations** (CompositeSpecification, And/Or/Not specifications)
 - **Cross-cutting domain concepts** that have identical meaning everywhere
 
 ❌ **Exclude:**
@@ -349,16 +363,16 @@ public record Money(BigDecimal amount, Currency currency) implements Value {
 }
 ```
 
-**Example - Base InputPort Interface:**
+**Example - Base UseCase Interface:**
 ```java
-// sharedkernel/application/port/InputPort.java
-public interface InputPort<INPUT, OUTPUT> {
+// sharedkernel/application/port/UseCase.java
+public interface UseCase<INPUT, OUTPUT> {
     OUTPUT execute(INPUT input);
 }
 
 // Usage in a bounded context:
 // order/application/createorder/CreateOrderInputPort.java
-public interface CreateOrderInputPort extends InputPort<CreateOrderCommand, CreateOrderResponse> {
+public interface CreateOrderInputPort extends UseCase<CreateOrderCommand, CreateOrderResponse> {
     // Inherits execute() method with specific types
 }
 ```
@@ -704,45 +718,41 @@ com.company.project
 │   │   │   ├── Order.java (Aggregate Root)
 │   │   │   ├── OrderId.java (Value Object)
 │   │   │   ├── OrderLine.java (Entity)
-│   │   │   ├── Money.java (Value Object)
 │   │   │   └── OrderStatus.java (Value Object/Enum)
 │   │   ├── service
 │   │   │   └── PricingService.java (Domain Service)
-│   │   ├── event
-│   │   │   ├── OrderCreated.java (Domain Event)
-│   │   │   └── OrderCancelled.java (Domain Event)
-│   │   └── exception
-│   │       ├── OrderNotFoundException.java
-│   │       └── InvalidOrderStateException.java
+│   │   └── event
+│   │       ├── OrderCreated.java (Domain Event)
+│   │       └── OrderCancelled.java (Domain Event)
 │   │
 │   ├── application (use-case focused - each use case self-contained)
-│   │   ├── createorder (use case folder - contains ALL related files)
+│   │   ├── createorder (use case folder - lowercase, contains ALL related files)
 │   │   │   ├── CreateOrderInputPort.java
-│   │   │   │   interface CreateOrderInputPort extends InputPort<CreateOrderCommand, CreateOrderResponse> {}
+│   │   │   │   interface CreateOrderInputPort extends UseCase<CreateOrderCommand, CreateOrderResponse> {}
 │   │   │   ├── CreateOrderUseCase.java
 │   │   │   │   @Service class CreateOrderUseCase implements CreateOrderInputPort { }
 │   │   │   ├── CreateOrderCommand.java
 │   │   │   └── CreateOrderResponse.java
 │   │   │
-│   │   ├── findorder (use case folder - contains ALL related files)
+│   │   ├── findorder (use case folder - lowercase, contains ALL related files)
 │   │   │   ├── FindOrderInputPort.java
-│   │   │   │   interface FindOrderInputPort extends InputPort<OrderQuery, OrderResponse> {}
+│   │   │   │   interface FindOrderInputPort extends UseCase<OrderQuery, OrderResponse> {}
 │   │   │   ├── FindOrderUseCase.java
 │   │   │   │   @Service class FindOrderUseCase implements FindOrderInputPort { }
 │   │   │   ├── OrderQuery.java
 │   │   │   └── OrderResponse.java
 │   │   │
-│   │   ├── cancelorder (use case folder - contains ALL related files)
+│   │   ├── cancelorder (use case folder - lowercase, contains ALL related files)
 │   │   │   ├── CancelOrderInputPort.java
-│   │   │   │   interface CancelOrderInputPort extends InputPort<CancelOrderCommand, CancelOrderResponse> {}
+│   │   │   │   interface CancelOrderInputPort extends UseCase<CancelOrderCommand, CancelOrderResponse> {}
 │   │   │   ├── CancelOrderUseCase.java
 │   │   │   │   @Service class CancelOrderUseCase implements CancelOrderInputPort { }
 │   │   │   ├── CancelOrderCommand.java
 │   │   │   └── CancelOrderResponse.java
 │   │   │
-│   │   ├── updateorder (use case folder - contains ALL related files)
+│   │   ├── updateorder (use case folder - lowercase, contains ALL related files)
 │   │   │   ├── UpdateOrderInputPort.java
-│   │   │   │   interface UpdateOrderInputPort extends InputPort<UpdateOrderCommand, UpdateOrderResponse> {}
+│   │   │   │   interface UpdateOrderInputPort extends UseCase<UpdateOrderCommand, UpdateOrderResponse> {}
 │   │   │   ├── UpdateOrderUseCase.java
 │   │   │   │   @Service class UpdateOrderUseCase implements UpdateOrderInputPort { }
 │   │   │   ├── UpdateOrderCommand.java
@@ -757,31 +767,28 @@ com.company.project
 │   └── adapter
 │       ├── incoming (INCOMING ADAPTERS - call input ports)
 │       │   ├── web
-│       │   │   ├── OrderController.java
+│       │   │   ├── OrderPageController.java
 │       │   │   ├── dto
 │       │   │   │   ├── CreateOrderWebRequest.java
 │       │   │   │   └── OrderWebResponse.java
 │       │   │   └── mapper
 │       │   │       └── OrderWebMapper.java
-│       │   ├── messaging
+│       │   ├── api
+│       │   │   └── OrderRestController.java
+│       │   ├── event
 │       │   │   ├── OrderEventConsumer.java
 │       │   │   ├── dto
 │       │   │   │   └── ExternalOrderEvent.java
 │       │   │   └── acl
 │       │   │       └── ExternalEventToCommandMapper.java
-│       │   └── cli
-│       │       └── OrderCommandHandler.java
+│       │   └── mcp
+│       │       └── OrderMcpToolProvider.java (Model Context Protocol)
 │       │
 │       └── outgoing (OUTGOING ADAPTERS - implement output ports)
 │           ├── persistence
-│           │   ├── OrderRepositoryAdapter.java (implements OrderRepository)
-│           │   ├── entity
-│           │   │   ├── OrderJpaEntity.java
-│           │   │   └── OrderLineJpaEntity.java
-│           │   ├── mapper
-│           │   │   └── OrderPersistenceMapper.java
-│           │   └── jpa
-│           │       └── SpringDataOrderRepository.java
+│           │   ├── InMemoryOrderRepository.java (implements OrderRepository)
+│           │   └── SampleDataInitializer.java (Optional: for demo data)
+│           │   # Note: For production, add JPA/JDBC adapters as needed
 │           ├── payment
 │           │   ├── PaymentGatewayAdapter.java (implements PaymentGateway)
 │           │   └── dto
@@ -850,12 +857,18 @@ com.company.project
 │   │   ├── marker (DDD pattern interfaces)
 │   │   │   ├── AggregateRoot.java
 │   │   │   │   public interface AggregateRoot<ID> extends Entity<ID> {}
+│   │   │   ├── BaseAggregateRoot.java
+│   │   │   │   public abstract class BaseAggregateRoot<ID> implements AggregateRoot<ID> {}
 │   │   │   ├── Entity.java
 │   │   │   │   public interface Entity<ID> { ID getId(); }
+│   │   │   ├── Id.java
+│   │   │   │   public interface Id<T> {}  // Base for typed identifiers
 │   │   │   ├── Value.java
 │   │   │   │   public interface Value {}  // Marker for value objects
 │   │   │   ├── DomainEvent.java
 │   │   │   │   public interface DomainEvent { Instant occurredOn(); }
+│   │   │   ├── IntegrationEvent.java
+│   │   │   │   public interface IntegrationEvent {}  // Cross-context events
 │   │   │   ├── DomainService.java
 │   │   │   │   public interface DomainService {}
 │   │   │   ├── Factory.java
@@ -864,23 +877,24 @@ com.company.project
 │   │   │       public interface Specification<T> { boolean isSatisfiedBy(T t); }
 │   │   ├── common (Universal value objects)
 │   │   │   ├── Money.java
-│   │   │   ├── Address.java
-│   │   │   └── EmailAddress.java
-│   │   └── exception (Base domain exceptions)
-│   │       ├── DomainException.java
-│   │       └── BusinessRuleViolationException.java
+│   │   │   ├── Price.java
+│   │   │   └── ProductId.java  // Example shared identifier
+│   │   └── spec (Specification pattern implementations)
+│   │       ├── CompositeSpecification.java
+│   │       ├── AndSpecification.java
+│   │       ├── OrSpecification.java
+│   │       ├── NotSpecification.java
+│   │       └── SpecificationVisitor.java
 │   └── application
 │       └── port (Base port interfaces)
-│           ├── InputPort.java
-│           │   public interface InputPort<INPUT, OUTPUT> {
+│           ├── UseCase.java
+│           │   public interface UseCase<INPUT, OUTPUT> {
 │           │     OUTPUT execute(INPUT input);
 │           │   }
-│           ├── OutputPort.java
-│           │   public interface OutputPort {}  // Marker interface
 │           ├── Repository.java
-│           │   public interface Repository<T, ID> extends OutputPort {}
+│           │   public interface Repository<T, ID> {}
 │           └── DomainEventPublisher.java
-│               public interface DomainEventPublisher extends OutputPort {
+│               public interface DomainEventPublisher {
 │                 void publish(DomainEvent event);
 │               }
 │
@@ -948,13 +962,16 @@ APPLICATION LAYER
 5. **Output Ports** (repositories, gateways) are shared across use cases in `shared/` directory
 
 **Naming Convention:**
-- Input Ports: `*InputPort extends InputPort<INPUT, OUTPUT>` (e.g., `CreateOrderInputPort extends InputPort<CreateOrderCommand, CreateOrderResponse>`)
-- Output Ports: Domain-specific names (e.g., `OrderRepository`, `PaymentGateway`, `DomainEventPublisher`)
-- Use Case Implementation: `*UseCase implements *InputPort` (e.g., `CreateOrderUseCase implements CreateOrderInputPort`)
-- Commands: `*Command` (e.g., `CreateOrderCommand`)
-- Queries: `*Query` (e.g., `OrderQuery`)
-- Responses: `*Response` (e.g., `CreateOrderResponse`)
-- Adapters: `*Adapter` (e.g., `OrderRepositoryAdapter`, `PaymentGatewayAdapter`)
+- **Use Case Folders**: lowercase (e.g., `createorder`, `findorder`, `cancelorder`)
+- **Input Ports**: `*InputPort extends UseCase<INPUT, OUTPUT>` (e.g., `CreateOrderInputPort extends UseCase<CreateOrderCommand, CreateOrderResponse>`)
+- **Output Ports**: Domain-specific names (e.g., `OrderRepository`, `PaymentGateway`, `DomainEventPublisher`)
+- **Use Case Implementation**: `*UseCase implements *InputPort` (e.g., `CreateOrderUseCase implements CreateOrderInputPort`)
+- **Commands**: `*Command` (e.g., `CreateOrderCommand`)
+- **Queries**: `*Query` (e.g., `OrderQuery`)
+- **Responses**: `*Response` (e.g., `CreateOrderResponse`)
+- **Adapters**: `*Adapter` or specific suffixes (e.g., `InMemoryOrderRepository`, `OrderPageController`, `OrderMcpToolProvider`)
+
+> **Reference Implementation:** See [ai-architecture-sample](https://github.com/chbloemer/ai-architecture-sample) for concrete examples of this structure in practice.
 
 **Benefits:**
 - ✅ **High Cohesion** - All files for one use case are together
