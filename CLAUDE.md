@@ -86,9 +86,9 @@ com.company.project/
 ### Adapter Layer
 - **Incoming Adapters**:
   - Web: `*PageController` (e.g., `ProductPageController`)
-  - API: `*RestController` (e.g., `OrderRestController`)
-  - Event: `*EventConsumer` (e.g., `OrderEventConsumer`)
-  - MCP: `*McpToolProvider` (e.g., `OrderMcpToolProvider`)
+  - API: `*Resource` (e.g., `ProductResource`, `OrderResource`)
+  - Event: `*EventConsumer` (e.g., `ProductEventConsumer`, `CartEventConsumer`)
+  - MCP: `*McpToolProvider` (e.g., `ProductCatalogMcpToolProvider`)
 - **Outgoing Adapters**: Implementation-specific (e.g., `InMemoryProductRepository`, `OrderRepositoryAdapter`)
 
 ### Domain Layer
