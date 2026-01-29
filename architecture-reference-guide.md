@@ -1,6 +1,8 @@
 # Architecture Reference Guide
 **Clean Architecture, DDD, and Hexagonal Architecture Principles**
 
+> **Purpose:** This is a **quick lookup reference** for developers who already understand Domain-Centric Architecture. For conceptual understanding and detailed explanations, see [README.md](./README.md).
+
 ---
 
 ## Table of Contents
@@ -85,13 +87,13 @@ domain/
 ```
 application/
 ├── createorder/            # Each use case in own folder - ALL related files together
-│   ├── CreateOrderInputPort.java     # Interface: extends InputPort<COMMAND, RESPONSE>
-│   ├── CreateOrderUseCase.java       # Implementation: implements InputPort
+│   ├── CreateOrderInputPort.java     # Interface: extends UseCase<COMMAND, RESPONSE>
+│   ├── CreateOrderUseCase.java       # Implementation: implements CreateOrderInputPort
 │   ├── CreateOrderCommand.java       # Input model (Command for writes)
 │   └── CreateOrderResponse.java      # Output model
 ├── findorder/              # Each use case in own folder - ALL related files together
-│   ├── FindOrderInputPort.java       # Interface: extends InputPort<QUERY, RESPONSE>
-│   ├── FindOrderUseCase.java         # Implementation: implements InputPort
+│   ├── FindOrderInputPort.java       # Interface: extends UseCase<QUERY, RESPONSE>
+│   ├── FindOrderUseCase.java         # Implementation: implements FindOrderInputPort
 │   ├── OrderQuery.java               # Input model (Query for reads)
 │   └── OrderResponse.java            # Output model
 ├── cancelorder/            # Each use case in own folder - ALL related files together
@@ -222,9 +224,19 @@ infrastructure/
   - **`common/`** - Universal value objects (Money, common IDs, Address)
   - **`exception/`** - Base domain exceptions
 - **`sharedkernel.application`** - Shared application-layer concepts:
-  - **`port/`** - Base port interfaces (InputPort<INPUT, OUTPUT>, OutputPort, Repository, DomainEventPublisher)
+  - **`port/`** - Base port interfaces (InputPort, OutputPort, UseCase, Repository, DomainEventPublisher)
 
 **Dependencies**: NONE (framework-independent)
+
+**Port Interface Hierarchy**:
+```
+Input Ports (Driving/Primary)        Output Ports (Driven/Secondary)
+┌────────────────────────────┐       ┌────────────────────────────┐
+│ InputPort (marker)         │       │ OutputPort (marker)        │
+│   └── UseCase<INPUT,OUTPUT>│       │   ├── Repository<T, ID>    │
+│         └── *InputPort     │       │   └── DomainEventPublisher │
+└────────────────────────────┘       └────────────────────────────┘
+```
 
 **Example Structure**:
 ```
@@ -248,8 +260,9 @@ sharedkernel/
 │       └── BusinessRuleViolationException.java
 └── application/
     └── port/                    ← Base port interfaces
-        ├── InputPort.java       # public interface InputPort<INPUT, OUTPUT> { OUTPUT execute(INPUT input); }
-        ├── OutputPort.java      # Marker interface
+        ├── InputPort.java       # public interface InputPort {} (marker)
+        ├── OutputPort.java      # public interface OutputPort {} (marker)
+        ├── UseCase.java         # public interface UseCase<INPUT, OUTPUT> extends InputPort { OUTPUT execute(INPUT input); }
         ├── Repository.java      # public interface Repository<T, ID> extends OutputPort {}
         └── DomainEventPublisher.java  # public interface DomainEventPublisher extends OutputPort { void publish(DomainEvent event); }
 ```

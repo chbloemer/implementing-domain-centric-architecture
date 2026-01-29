@@ -17,7 +17,7 @@ While the main [Domain-Centric Architecture](./README.md) defines the logical st
 
 ### What is SCS?
 
-A **Self-Contained System** is an autonomous,independently deployable unit that includes:
+A **Self-Contained System** is an autonomous, independently deployable unit that includes:
 
 - **UI** (if needed) - User interface components
 - **Business Logic** - Domain and application layers

@@ -35,6 +35,32 @@
 - [ADDITIONAL TOPICS](#additional-topics)
 - [REFERENCES & FURTHER READING](#references--further-reading)
 
+## Quick Navigation
+
+### New to Domain-Centric Architecture?
+| Step | Section | Description |
+|------|---------|-------------|
+| 1 | [Key Points](#key-points) | Core concepts and benefits |
+| 2 | [Four Layers](#key-points) | Layer diagram and dependency flow |
+| 3 | [Use Case Pattern](#use-case-pattern-with-input-ports) | Application layer organization |
+| 4 | [Reference Implementation](https://github.com/chbloemer/ai-architecture-sample) | Working code examples |
+
+### Ready to Implement?
+- **[Java Package Structure](#java-package-structure)** - Copy-paste templates
+- **[Spring Modulith](./spring-modulith.md)** - Framework implementation guide
+- **[ArchUnit Governance](./archunit-governance.md)** - Enforce rules automatically
+
+### Deep Dive Topics
+| Topic | Guide | When to Read |
+|-------|-------|--------------|
+| Clean Architecture comparison | [clean-architecture-comparison.md](./clean-architecture-comparison.md) | Understand differences |
+| Deployment strategies | [deployment-patterns.md](./deployment-patterns.md) | Planning production |
+| Team organization | [team-topologies.md](./team-topologies.md) | Scaling teams |
+| Architecture decisions | [adr-template.md](./adr-template.md) | Documenting choices |
+| Quick lookup | [architecture-reference-guide.md](./architecture-reference-guide.md) | Already know DCA, need quick reference |
+
+---
+
 ## Key Points
 
 **Domain-Centric Architecture** is an architectural approach that puts **domain logic at the center** and protects it from infrastructure concerns. It synthesizes proven patterns from Domain-Driven Design, Hexagonal Architecture, and Clean Architecture.
@@ -297,12 +323,26 @@ sharedkernel/
 │       └── SpecificationVisitor.java
 └── application/
     └── port/                      # Shared port interfaces (base contracts)
-        ├── UseCase.java           # Base interface: UseCase<INPUT, OUTPUT>
-        ├── Repository.java        # Base repository interface
-        └── DomainEventPublisher.java  # Base event publisher interface
+        ├── InputPort.java         # Marker interface for input ports (driving adapters)
+        ├── OutputPort.java        # Marker interface for output ports (driven adapters)
+        ├── UseCase.java           # Base interface: UseCase<INPUT, OUTPUT> extends InputPort
+        ├── Repository.java        # Base repository: extends OutputPort
+        └── DomainEventPublisher.java  # Event publishing: extends OutputPort
 ```
 
-> **Note:** The reference implementation at [ai-architecture-sample](https://github.com/chbloemer/ai-architecture-sample) uses `UseCase<INPUT, OUTPUT>` as the base interface, not `InputPort<INPUT, OUTPUT>`. Both names are valid - choose based on your team's preference.
+**Port Interface Hierarchy:**
+```
+Input Ports (Driving/Primary)        Output Ports (Driven/Secondary)
+┌────────────────────────────┐       ┌────────────────────────────┐
+│ InputPort (marker)         │       │ OutputPort (marker)        │
+│   └── UseCase<INPUT,OUTPUT>│       │   ├── Repository<T, ID>    │
+│         └── *InputPort     │       │   └── DomainEventPublisher │
+└────────────────────────────┘       └────────────────────────────┘
+```
+
+- **InputPort** - Marker interface for all entry points to the application (called by driving adapters)
+- **OutputPort** - Marker interface for all dependencies the application needs (implemented by driven adapters)
+- **UseCase<INPUT, OUTPUT>** - Specific input port type with Command/Query → Response pattern
 
 **What Belongs in Shared Kernel:**
 
@@ -326,6 +366,31 @@ sharedkernel/
 - Only include code that has **identical meaning** across all contexts
 - When in doubt, duplicate rather than share
 - Use versioning if Shared Kernel becomes a separate module
+
+**Decision Tree: Should This Go in Shared Kernel?**
+```
+START: I have code that might be shared
+   │
+   ├─ Is it used by 2+ bounded contexts?
+   │     NO → Keep in single context
+   │     YES ↓
+   │
+   ├─ Does it have IDENTICAL meaning everywhere?
+   │     NO → Duplicate instead (different models OK)
+   │     YES ↓
+   │
+   ├─ Is it a marker interface or base type?
+   │     YES → Add to sharedkernel/domain/marker/
+   │     NO ↓
+   │
+   ├─ Is it a universal value object (Money, Address)?
+   │     YES → Add to sharedkernel/domain/common/
+   │     NO ↓
+   │
+   └─ Is it a base port interface (UseCase, Repository)?
+         YES → Add to sharedkernel/application/port/
+         NO → Probably shouldn't be in Shared Kernel
+```
 
 **Example - Marker Interface:**
 ```java
@@ -365,17 +430,40 @@ public record Money(BigDecimal amount, Currency currency) implements Value {
 }
 ```
 
-**Example - Base UseCase Interface:**
+**Example - Port Interface Hierarchy:**
 ```java
+// sharedkernel/application/port/InputPort.java
+public interface InputPort {
+    // Marker interface for all input ports (hexagonal architecture concept)
+}
+
+// sharedkernel/application/port/OutputPort.java
+public interface OutputPort {
+    // Marker interface for all output ports (hexagonal architecture concept)
+}
+
 // sharedkernel/application/port/UseCase.java
-public interface UseCase<INPUT, OUTPUT> {
+public interface UseCase<INPUT, OUTPUT> extends InputPort {
     OUTPUT execute(INPUT input);
+}
+
+// sharedkernel/application/port/Repository.java
+public interface Repository<T, ID> extends OutputPort {
+    Optional<T> findById(ID id);
+    T save(T aggregate);
+    void deleteById(ID id);
 }
 
 // Usage in a bounded context:
 // order/application/createorder/CreateOrderInputPort.java
 public interface CreateOrderInputPort extends UseCase<CreateOrderCommand, CreateOrderResponse> {
     // Inherits execute() method with specific types
+}
+
+// order/application/shared/OrderRepository.java
+public interface OrderRepository extends Repository<Order, OrderId> {
+    // Inherits base methods, add domain-specific queries
+    Optional<Order> findByCustomerId(CustomerId customerId);
 }
 ```
 
@@ -453,6 +541,31 @@ public interface CreateOrderInputPort extends UseCase<CreateOrderCommand, Create
 - Event Mapper converts domain event → integration event DTO
 - Integration Events must be backward compatible (add fields, don't remove)
 - Integration Events contain only primitives and value types, no domain objects
+
+**Decision Tree: Domain Event or Integration Event?**
+```
+START: Something happened in the domain
+   │
+   ├─ Does it need to cross bounded context boundaries?
+   │     NO → Domain Event only
+   │     │     - Define in: {context}/domain/event/
+   │     │     - Name: past tense (e.g., OrderCreated)
+   │     │     - Contains: domain objects OK
+   │     │
+   │     YES ↓
+   │
+   ├─ Create Domain Event FIRST (always)
+   │     - Define in: {context}/domain/event/
+   │     - Published via DomainEventPublisher
+   │     ↓
+   │
+   └─ Create Integration Event (for external consumers)
+         - Define in: {context}/adapter/outgoing/messaging/event/
+         - Name: past tense + "Event" suffix (e.g., OrderCreatedEvent)
+         - Contains: only primitives and serializable types
+         - Created by: Event Mapper in adapter layer
+         - Published to: message broker (Kafka, RabbitMQ)
+```
 
 #### Event Publishing Rules
 - Use cases call DomainEventPublisher (Output Port) to publish events
@@ -634,6 +747,116 @@ public interface CreateOrderInputPort extends UseCase<CreateOrderCommand, Create
 - Adapters tested with integration tests
 - Full system tested with acceptance tests
 - Test pyramid: many unit, fewer integration, few E2E
+
+### ERROR HANDLING RULES
+
+#### Exception Layer Placement
+- **Domain Exceptions** - Business rule violations (e.g., `InsufficientStockException`, `InvalidOrderStateException`)
+- **Application Exceptions** - Use case failures (e.g., `OrderNotFoundException`, `CustomerNotActiveException`)
+- **Adapter Exceptions** - Translated to appropriate responses (HTTP status codes, error DTOs)
+
+#### Exception Flow Pattern
+```
+Domain Exception (invariant violation)
+    ↓ propagates to
+Application Layer (can catch, wrap, or let propagate)
+    ↓ propagates to
+Adapter Layer (translates to external format)
+    ↓ returns
+HTTP 400/404/422 + Error DTO
+```
+
+#### Error Handling Best Practices
+- Domain exceptions should be **domain language** (not technical)
+- Use cases catch domain exceptions only when they need to **transform behavior**
+- Adapters (controllers) handle **all exceptions** and convert to external format
+- Never expose stack traces or internal details to external consumers
+- Use **exception mappers** or `@ExceptionHandler` in adapters for consistent responses
+
+#### Example - Exception Handling Across Layers
+```java
+// Domain exception (business rule violation)
+public class InsufficientStockException extends RuntimeException {
+    private final ProductId productId;
+    private final int requested;
+    private final int available;
+    // Constructor with domain details
+}
+
+// Application exception (use case failure)
+public class ProductNotFoundException extends RuntimeException {
+    private final ProductId productId;
+    public ProductNotFoundException(ProductId productId) {
+        super("Product not found: " + productId.value());
+        this.productId = productId;
+    }
+}
+
+// Adapter - Exception handler (translates to HTTP response)
+@RestControllerAdvice
+public class OrderExceptionHandler {
+    @ExceptionHandler(ProductNotFoundException.class)
+    @ResponseStatus(HttpStatus.NOT_FOUND)
+    public ErrorResponse handle(ProductNotFoundException ex) {
+        return new ErrorResponse("PRODUCT_NOT_FOUND", ex.getMessage());
+    }
+
+    @ExceptionHandler(InsufficientStockException.class)
+    @ResponseStatus(HttpStatus.UNPROCESSABLE_ENTITY)
+    public ErrorResponse handle(InsufficientStockException ex) {
+        return new ErrorResponse("INSUFFICIENT_STOCK", "Not enough stock available");
+    }
+}
+```
+
+### TRANSACTION RULES
+
+#### Transaction Boundary Placement
+- **Transaction boundaries live at the use case level** (application layer)
+- One transaction = one aggregate modification (single aggregate rule)
+- Use `@Transactional` (or equivalent) on use case implementations
+- Domain layer is transaction-agnostic
+
+#### Cross-Aggregate Consistency
+- **Within same bounded context**: eventual consistency via domain events
+- **Across bounded contexts**: eventual consistency via integration events
+- Never modify multiple aggregates in one transaction
+
+#### Transaction Pattern Example
+```java
+@Service
+public class CreateOrderUseCase implements CreateOrderInputPort {
+
+    private final OrderRepository orderRepository;
+    private final DomainEventPublisher eventPublisher;
+
+    @Transactional  // Transaction boundary at use case level
+    @Override
+    public CreateOrderResponse execute(CreateOrderCommand command) {
+        // 1. Domain logic (within transaction)
+        Order order = Order.create(command.customerId(), command.items());
+
+        // 2. Persist single aggregate
+        orderRepository.save(order);
+
+        // 3. Publish events (after persistence, before commit)
+        eventPublisher.publishAndClearEvents(order);
+
+        return CreateOrderResponse.from(order);
+    }
+}
+```
+
+#### Eventual Consistency Example
+```
+Order Aggregate modified → OrderCreated event published
+    ↓ (async, separate transaction)
+Inventory Aggregate modified → StockReserved event published
+    ↓ (async, separate transaction)
+Customer Aggregate notified → Loyalty points updated
+```
+
+**Note:** For complex multi-aggregate workflows, consider the **Saga pattern** (orchestration or choreography). This is an advanced topic beyond the scope of basic domain-centric architecture.
 
 ### PACKAGING RULES
 
@@ -930,7 +1153,7 @@ This example shows how a bounded context's structure naturally evolves as comple
 APPLICATION LAYER
 ├── createorder/                   (USE CASE - All related files together)
 │   ├── CreateOrderInputPort.java      ← Input Port Interface
-│   │   interface CreateOrderInputPort extends InputPort<CreateOrderCommand, CreateOrderResponse>
+│   │   interface CreateOrderInputPort extends UseCase<CreateOrderCommand, CreateOrderResponse>
 │   ├── CreateOrderUseCase.java        ← Use Case Implementation
 │   │   @Service class CreateOrderUseCase implements CreateOrderInputPort
 │   ├── CreateOrderCommand.java        ← Input Model (Command for writes)

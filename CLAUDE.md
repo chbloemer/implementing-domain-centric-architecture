@@ -46,12 +46,12 @@ Each use case is self-contained in its own folder:
 ```
 application/
 ├── {usecasename}/
-│   ├── *InputPort.java      # Interface: extends InputPort<INPUT, OUTPUT>
-│   ├── *UseCase.java         # Implementation
+│   ├── *InputPort.java      # Interface: extends UseCase<INPUT, OUTPUT>
+│   ├── *UseCase.java         # Implementation: implements *InputPort
 │   ├── *Command.java         # Input (writes) or *Query.java (reads)
 │   └── *Response.java        # Output
 └── shared/
-    └── *Repository.java      # Shared Output Ports
+    └── *Repository.java      # Shared Output Ports (extends OutputPort)
 ```
 
 ### Bounded Context Pattern
@@ -100,14 +100,19 @@ com.company.project/
 The [ai-architecture-sample](https://github.com/chbloemer/ai-architecture-sample) demonstrates these specific choices:
 
 ### Shared Kernel Structure
-- **Base Interface**: `UseCase<INPUT, OUTPUT>` (not `InputPort<INPUT, OUTPUT>`)
+- **Port Interface Hierarchy**:
+  - `InputPort` - Marker interface for all input ports (driving adapters)
+  - `OutputPort` - Marker interface for all output ports (driven adapters)
+  - `UseCase<INPUT, OUTPUT> extends InputPort` - Specific input port with Command/Query → Response pattern
+  - `Repository<T, ID> extends OutputPort` - Base repository interface
+  - `DomainEventPublisher extends OutputPort` - Event publishing interface
 - **Marker Interfaces**: Includes `Id.java`, `IntegrationEvent.java`, `BaseAggregateRoot.java`
-- **Specification Pattern**: Fully implemented in `sharedkernel/domain/spec/` with Composite, And, Or, Not specifications
+- **Specification Pattern**: Fully implemented in `sharedkernel/domain/specification/` with Composite, And, Or, Not specifications
 - **Common Value Objects**: `Money.java`, `Price.java`, `ProductId.java`
 
 ### Domain Layer
-- **Structure**: Only `model/`, `event/`, `service/` subdirectories
-- **No separate**: `exception/` or `specification/` packages at domain level
+- **Structure**: `model/`, `event/`, `service/`, `specification/` subdirectories
+- **No separate**: `exception/` packages at domain level
 
 ### Adapter Layer
 - **Incoming**: `web/`, `api/`, `event/`, `mcp/` (Model Context Protocol for AI integration)
