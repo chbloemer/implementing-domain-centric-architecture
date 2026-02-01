@@ -57,6 +57,7 @@
 | Deployment strategies | [deployment-patterns.md](./deployment-patterns.md) | Planning production |
 | Team organization | [team-topologies.md](./team-topologies.md) | Scaling teams |
 | Architecture decisions | [adr-template.md](./adr-template.md) | Documenting choices |
+| E2E Testing | [e2e-testing.md](./e2e-testing.md) | Browser-based testing |
 | Quick lookup | [architecture-reference-guide.md](./architecture-reference-guide.md) | Already know DCA, need quick reference |
 
 ---
@@ -1405,10 +1406,146 @@ Order Context                                     Inventory Context
 
 ### Different Bounded Contexts
 - Anti-Corruption Layer for external models
-- Published Language / Open Host Service
+- Open Host Service for synchronous queries
 - Domain events via message broker
 - REST API with DTOs
 - Shared Kernel (minimal, coordinated)
+
+### Open Host Service Pattern
+
+For synchronous cross-context queries, use the Open Host Service pattern.
+
+```
+PROVIDER CONTEXT (Product)               CONSUMER CONTEXT (Cart)
+┌──────────────────────────────┐        ┌──────────────────────────────┐
+│ adapter/incoming/api/        │        │ adapter/outgoing/product/    │
+│   ProductCatalogApi          │◄───────│   ProductDataAdapter         │
+│   @RestController (REST)     │ calls  │   (implements ProductDataPort)│
+│   OR @OpenHostService        │        └───────────────┬──────────────┘
+│   (in-process modulith)      │                        │ implements
+└──────────────────────────────┘                        ▼
+                                        ┌──────────────────────────────┐
+                                        │ application/shared/          │
+                                        │   ProductDataPort            │
+                                        │   (output port)              │
+                                        └───────────────┬──────────────┘
+                                                        │ uses
+                                                        ▼
+                                        ┌──────────────────────────────┐
+                                        │ application/additemtocart/   │
+                                        │   AddItemToCartUseCase       │
+                                        │   (uses port, NOT OHS)       │
+                                        └──────────────────────────────┘
+```
+
+#### Provider: REST API (Canonical)
+
+The canonical DDD Open Host Service is a **REST API** with a published language:
+
+```java
+// adapter/incoming/api/ProductCatalogApi.java
+@RestController
+@RequestMapping("/api/v1/products")
+public class ProductCatalogApi {
+
+    private final GetProductByIdInputPort getProductUseCase;
+
+    public record ProductInfoDto(String id, String name, BigDecimal price, int stock) {}
+
+    @GetMapping("/{productId}")
+    public ResponseEntity<ProductInfoDto> getProduct(@PathVariable String productId) {
+        return getProductUseCase.execute(new GetProductQuery(ProductId.of(productId)))
+            .map(r -> new ProductInfoDto(r.productId().value(), r.name(), r.price().amount(), r.stock()))
+            .map(ResponseEntity::ok)
+            .orElse(ResponseEntity.notFound().build());
+    }
+}
+```
+
+#### Provider: In-Process Service (Modulith Optimization)
+
+For modulith deployments (single JVM), an in-process service avoids network overhead:
+
+```java
+// adapter/incoming/openhost/ProductCatalogService.java
+@OpenHostService(context = "Product Catalog", description = "...")
+@Service
+public class ProductCatalogService {
+    private final GetProductByIdInputPort getProductByIdInputPort;  // Use case, NOT repository
+
+    public record ProductInfo(ProductId productId, String name, Price price, int availableStock) {}
+
+    public Optional<ProductInfo> getProductInfo(ProductId productId) {
+        var response = getProductByIdInputPort.execute(new GetProductByIdQuery(productId.value()));
+        if (!response.found()) return Optional.empty();
+        return Optional.of(new ProductInfo(
+            productId, response.name(),
+            Price.of(Money.of(response.priceAmount(), Currency.getInstance(response.priceCurrency()))),
+            response.stockQuantity()
+        ));
+    }
+}
+```
+
+**Important:** As an incoming adapter, the OHS calls **use cases (input ports)**, not repositories directly.
+
+#### Consumer: Output Port + Adapter (Same for Both)
+
+The consumer-side pattern is **identical** regardless of transport:
+
+```java
+// application/shared/ProductDataPort.java - Consumer defines what it needs
+public interface ProductDataPort extends OutputPort {
+    record ProductData(ProductId id, Price price, boolean hasStock) {}
+    Optional<ProductData> getProductData(ProductId id, int quantity);
+}
+
+// adapter/outgoing/product/ProductDataAdapter.java - REST variant
+@Component
+public class ProductDataAdapter implements ProductDataPort {
+    private final RestTemplate restTemplate;  // For REST API
+
+    public Optional<ProductData> getProductData(ProductId id, int qty) {
+        var response = restTemplate.getForObject("/api/v1/products/" + id.value(), ProductInfoDto.class);
+        if (response == null) return Optional.empty();
+        return Optional.of(new ProductData(id, Price.of(response.price()), response.stock() >= qty));
+    }
+}
+
+// OR: adapter/outgoing/product/ProductDataAdapter.java - In-process variant (modulith)
+@Component
+public class ProductDataAdapter implements ProductDataPort {
+    private final ProductCatalogService productCatalogService;  // In-process OHS
+
+    public Optional<ProductData> getProductData(ProductId id, int qty) {
+        return productCatalogService.getProductInfo(id)
+            .map(info -> new ProductData(id, info.price(), info.stock() >= qty));
+    }
+}
+
+// application/additemtocart/AddItemToCartUseCase.java - Uses port only (unchanged)
+@Service
+public class AddItemToCartUseCase {
+    private final ProductDataPort productDataPort;  // NOT ProductCatalogService or RestTemplate
+
+    public AddItemToCartResponse execute(AddItemToCartCommand cmd) {
+        ProductData data = productDataPort.getProductData(cmd.productId(), cmd.qty())
+            .orElseThrow(() -> new IllegalArgumentException("Product not found"));
+        // ...
+    }
+}
+```
+
+**Key Point:** Only the adapter implementation changes when migrating from modulith to microservices. Use cases and ports remain identical.
+
+**Rules:**
+- ✅ REST API in `adapter/incoming/api/` (canonical OHS)
+- ✅ In-process OHS in `adapter/incoming/openhost/` (modulith optimization)
+- ✅ OHS returns DTOs, never domain objects
+- ✅ Consumer defines own output port specifying exactly what it needs
+- ✅ Consumer's adapter in `adapter/outgoing/{context}/` is the ONLY place that imports OHS
+- ❌ Use cases never import OHS directly (violates hexagonal architecture)
+- ❌ Application layer never imports from other bounded contexts
 
 > **Note:** For multi-service integration patterns, see [Deployment Patterns](./deployment-patterns.md)
 
@@ -1443,6 +1580,9 @@ For practical implementation using Spring Modulith including event publication, 
 
 ### Team Organization and Conway's Law
 For guidance on aligning teams with bounded contexts using Team Topologies principles, see [Team Topologies Integration](./team-topologies.md).
+
+### E2E Testing Patterns
+For browser-based E2E testing using Playwright with data-test attributes and the Page Object Pattern, see [E2E Testing](./e2e-testing.md).
 
 ## References & Further Reading
 
