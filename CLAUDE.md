@@ -63,11 +63,15 @@ com.company.project/
 │   ├── adapter/
 │   │   ├── incoming/         # Controllers, event consumers
 │   │   └── outgoing/         # Repository impls, API clients
-│   └── infrastructure/       # Framework configuration
+│   └── infrastructure/       # Framework configuration (optional, per-context)
 ├── sharedkernel/             # Keep minimal - Architectural markers, value objects
 │   ├── marker/               # tactical/, strategic/, port/in/, port/out/
-│   └── domain/model/         # Universal value objects (Money, ProductId, UserId)
-└── infrastructure/           # Global infrastructure (security, annotation, etc.)
+│   ├── domain/model/         # Universal value objects (Money, ProductId, UserId)
+│   └── adapter/outgoing/     # Shared adapters (e.g., SpringDomainEventPublisher)
+└── infrastructure/           # Global infrastructure (cross-cutting)
+    ├── config/               # @Configuration classes
+    ├── support/              # Framework support (processors, listeners)
+    └── security/             # Security infrastructure
 ```
 
 ### Event Patterns
