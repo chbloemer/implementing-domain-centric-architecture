@@ -64,7 +64,10 @@ com.company.project/
 │   │   ├── incoming/         # Controllers, event consumers
 │   │   └── outgoing/         # Repository impls, API clients
 │   └── infrastructure/       # Framework configuration
-└── sharedkernel/             # Keep minimal - DDD markers, universal value objects
+├── sharedkernel/             # Keep minimal - Architectural markers, value objects
+│   ├── marker/               # tactical/, strategic/, port/in/, port/out/
+│   └── domain/model/         # Universal value objects (Money, ProductId, UserId)
+└── infrastructure/           # Global infrastructure (security, annotation, etc.)
 ```
 
 ### Event Patterns
@@ -100,15 +103,21 @@ com.company.project/
 The [ai-architecture-sample](https://github.com/chbloemer/ai-architecture-sample) demonstrates these specific choices:
 
 ### Shared Kernel Structure
+- **Package Organization**: Consolidated under `marker/` with subpackages:
+  - `marker/tactical/` - DDD tactical patterns (Entity, Value, AggregateRoot, DomainEvent, etc.)
+  - `marker/strategic/` - DDD strategic patterns (BoundedContext, SharedKernel, OpenHostService)
+  - `marker/port/in/` - Input ports (InputPort, UseCase)
+  - `marker/port/out/` - Output ports (OutputPort, Repository, DomainEventPublisher, IdentityProvider)
 - **Port Interface Hierarchy**:
   - `InputPort` - Marker interface for all input ports (driving adapters)
   - `OutputPort` - Marker interface for all output ports (driven adapters)
   - `UseCase<INPUT, OUTPUT> extends InputPort` - Specific input port with Command/Query → Response pattern
   - `Repository<T, ID> extends OutputPort` - Base repository interface
   - `DomainEventPublisher extends OutputPort` - Event publishing interface
+  - `IdentityProvider extends OutputPort` - With nested `Identity` and `IdentityType` interfaces
 - **Marker Interfaces**: Includes `Id.java`, `IntegrationEvent.java`, `BaseAggregateRoot.java`
 - **Specification Pattern**: Fully implemented in `sharedkernel/domain/specification/` with Composite, And, Or, Not specifications
-- **Common Value Objects**: `Money.java`, `Price.java`, `ProductId.java`
+- **Common Value Objects**: `Money.java`, `Price.java`, `ProductId.java`, `UserId.java` in `sharedkernel/domain/model/`
 
 ### Domain Layer
 - **Structure**: `model/`, `event/`, `service/`, `specification/` subdirectories

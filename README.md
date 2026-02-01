@@ -300,45 +300,87 @@ The **Shared Kernel** contains code shared across ALL bounded contexts within yo
 **Structure:**
 ```
 sharedkernel/
-├── domain/
-│   ├── marker/                    # DDD marker interfaces (define patterns)
+├── marker/                        # All architectural markers (consolidated)
+│   ├── tactical/                  # DDD Tactical Patterns
+│   │   ├── Id.java                # Base interface for identifiers
+│   │   ├── Entity.java            # Interface for entities
+│   │   ├── Value.java             # Marker for value objects
 │   │   ├── AggregateRoot.java     # Interface for aggregate roots
 │   │   ├── BaseAggregateRoot.java # Abstract base implementation
-│   │   ├── Entity.java            # Interface for entities
-│   │   ├── Id.java                # Base interface for identifiers
-│   │   ├── Value.java             # Marker for value objects
 │   │   ├── DomainEvent.java       # Interface for domain events
 │   │   ├── IntegrationEvent.java  # Interface for integration events
 │   │   ├── DomainService.java     # Marker for domain services
 │   │   ├── Factory.java           # Marker for factories
 │   │   └── Specification.java     # Interface for specifications
-│   ├── common/                    # Shared value objects (used by multiple contexts)
-│   │   ├── Money.java             # Universal money type
-│   │   ├── Price.java             # Common price value object
-│   │   └── ProductId.java         # Example shared identifier
-│   └── spec/                      # Specification pattern implementations
-│       ├── CompositeSpecification.java
-│       ├── AndSpecification.java
-│       ├── OrSpecification.java
-│       ├── NotSpecification.java
-│       └── SpecificationVisitor.java
-└── application/
-    └── port/                      # Shared port interfaces (base contracts)
-        ├── InputPort.java         # Marker interface for input ports (driving adapters)
-        ├── OutputPort.java        # Marker interface for output ports (driven adapters)
-        ├── UseCase.java           # Base interface: UseCase<INPUT, OUTPUT> extends InputPort
-        ├── Repository.java        # Base repository: extends OutputPort
-        └── DomainEventPublisher.java  # Event publishing: extends OutputPort
+│   ├── strategic/                 # DDD Strategic Patterns
+│   │   ├── SharedKernel.java      # Annotation for shared kernel packages
+│   │   ├── BoundedContext.java    # Annotation for bounded context packages
+│   │   └── OpenHostService.java   # Marker for Open Host Service adapters
+│   └── port/                      # Hexagonal Architecture Ports
+│       ├── in/                    # Input Ports (Driving/Primary)
+│       │   ├── InputPort.java     # Marker for all input ports
+│       │   └── UseCase.java       # UseCase<INPUT, OUTPUT> extends InputPort
+│       └── out/                   # Output Ports (Driven/Secondary)
+│           ├── OutputPort.java    # Marker for all output ports
+│           ├── Repository.java    # Base repository: extends OutputPort
+│           ├── DomainEventPublisher.java  # Event publishing: extends OutputPort
+│           └── IdentityProvider.java      # Identity abstraction with nested interfaces
+│
+└── domain/
+    ├── model/                     # Universal Value Objects
+    │   ├── Money.java             # Universal money type
+    │   ├── Price.java             # Common price value object
+    │   ├── ProductId.java         # Shared product identifier
+    │   └── UserId.java            # Shared user identifier
+    └── specification/             # Specification Pattern Implementation
+        ├── CompositeSpecification.java
+        ├── AndSpecification.java
+        ├── OrSpecification.java
+        ├── NotSpecification.java
+        └── SpecificationVisitor.java
 ```
 
 **Port Interface Hierarchy:**
 ```
-Input Ports (Driving/Primary)        Output Ports (Driven/Secondary)
+Input Ports (marker/port/in/)        Output Ports (marker/port/out/)
 ┌────────────────────────────┐       ┌────────────────────────────┐
 │ InputPort (marker)         │       │ OutputPort (marker)        │
 │   └── UseCase<INPUT,OUTPUT>│       │   ├── Repository<T, ID>    │
-│         └── *InputPort     │       │   └── DomainEventPublisher │
-└────────────────────────────┘       └────────────────────────────┘
+│         └── *InputPort     │       │   ├── DomainEventPublisher │
+└────────────────────────────┘       │   └── IdentityProvider     │
+                                     └────────────────────────────┘
+```
+
+**Identity Pattern (Extensible Design):**
+```java
+// In sharedkernel/marker/port/out/IdentityProvider.java
+public interface IdentityProvider extends OutputPort {
+    Identity getCurrentIdentity();
+
+    // Nested interface - contract for identity
+    interface Identity {
+        UserId userId();
+        IdentityType type();
+        Optional<String> email();
+        Set<String> roles();
+        default boolean isAnonymous() { return type().isAnonymous(); }
+        default boolean isRegistered() { return type().isRegistered(); }
+    }
+
+    // Nested interface - extensible identity type
+    interface IdentityType {
+        String name();
+        boolean isAnonymous();
+        boolean isRegistered();
+    }
+}
+
+// In infrastructure/security/ - PROJECT-SPECIFIC implementations
+public enum JwtIdentityType implements IdentityProvider.IdentityType {
+    ANONYMOUS, REGISTERED, SERVICE_ACCOUNT;  // Extensible per project
+}
+
+public record JwtIdentity(...) implements IdentityProvider.Identity { ... }
 ```
 
 - **InputPort** - Marker interface for all entry points to the application (called by driving adapters)
@@ -1079,18 +1121,18 @@ com.company.project
 │       └── outgoing
 │
 ├── sharedkernel (Shared across ALL bounded contexts - keep minimal)
-│   ├── domain
-│   │   ├── marker (DDD pattern interfaces)
+│   ├── marker (All architectural markers consolidated)
+│   │   ├── tactical (DDD tactical patterns)
+│   │   │   ├── Id.java
+│   │   │   │   public interface Id<T> {}  // Base for typed identifiers
+│   │   │   ├── Entity.java
+│   │   │   │   public interface Entity<ID> { ID getId(); }
+│   │   │   ├── Value.java
+│   │   │   │   public interface Value {}  // Marker for value objects
 │   │   │   ├── AggregateRoot.java
 │   │   │   │   public interface AggregateRoot<ID> extends Entity<ID> {}
 │   │   │   ├── BaseAggregateRoot.java
 │   │   │   │   public abstract class BaseAggregateRoot<ID> implements AggregateRoot<ID> {}
-│   │   │   ├── Entity.java
-│   │   │   │   public interface Entity<ID> { ID getId(); }
-│   │   │   ├── Id.java
-│   │   │   │   public interface Id<T> {}  // Base for typed identifiers
-│   │   │   ├── Value.java
-│   │   │   │   public interface Value {}  // Marker for value objects
 │   │   │   ├── DomainEvent.java
 │   │   │   │   public interface DomainEvent { Instant occurredOn(); }
 │   │   │   ├── IntegrationEvent.java
@@ -1101,28 +1143,38 @@ com.company.project
 │   │   │   │   public interface Factory<T> {}
 │   │   │   └── Specification.java
 │   │   │       public interface Specification<T> { boolean isSatisfiedBy(T t); }
-│   │   ├── common (Universal value objects)
-│   │   │   ├── Money.java
-│   │   │   ├── Price.java
-│   │   │   └── ProductId.java  // Example shared identifier
-│   │   └── spec (Specification pattern implementations)
-│   │       ├── CompositeSpecification.java
-│   │       ├── AndSpecification.java
-│   │       ├── OrSpecification.java
-│   │       ├── NotSpecification.java
-│   │       └── SpecificationVisitor.java
-│   └── application
-│       └── port (Base port interfaces)
-│           ├── UseCase.java
-│           │   public interface UseCase<INPUT, OUTPUT> {
-│           │     OUTPUT execute(INPUT input);
-│           │   }
-│           ├── Repository.java
-│           │   public interface Repository<T, ID> {}
-│           └── DomainEventPublisher.java
-│               public interface DomainEventPublisher {
-│                 void publish(DomainEvent event);
-│               }
+│   │   ├── strategic (DDD strategic patterns)
+│   │   │   ├── SharedKernel.java      // Package annotation
+│   │   │   ├── BoundedContext.java    // Package annotation
+│   │   │   └── OpenHostService.java   // Marker for OHS adapters
+│   │   └── port (Hexagonal architecture ports)
+│   │       ├── in (Input ports - driving adapters)
+│   │       │   ├── InputPort.java     // Marker for all input ports
+│   │       │   └── UseCase.java
+│   │       │       public interface UseCase<INPUT, OUTPUT> extends InputPort {
+│   │       │         OUTPUT execute(INPUT input);
+│   │       │       }
+│   │       └── out (Output ports - driven adapters)
+│   │           ├── OutputPort.java    // Marker for all output ports
+│   │           ├── Repository.java
+│   │           │   public interface Repository<T, ID> extends OutputPort {}
+│   │           ├── DomainEventPublisher.java
+│   │           │   public interface DomainEventPublisher extends OutputPort {
+│   │           │     void publish(DomainEvent event);
+│   │           │   }
+│   │           └── IdentityProvider.java  // With nested Identity and IdentityType interfaces
+│   └── domain
+│       ├── model (Universal value objects)
+│       │   ├── Money.java
+│       │   ├── Price.java
+│       │   ├── ProductId.java  // Shared product identifier
+│       │   └── UserId.java     // Shared user identifier
+│       └── specification (Specification pattern implementations)
+│           ├── CompositeSpecification.java
+│           ├── AndSpecification.java
+│           ├── OrSpecification.java
+│           ├── NotSpecification.java
+│           └── SpecificationVisitor.java
 │
 └── infrastructure (cross-cutting concerns)
     ├── configuration
