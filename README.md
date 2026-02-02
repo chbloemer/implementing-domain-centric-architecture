@@ -171,18 +171,18 @@ The application layer organizes business operations using a structured **Use Cas
 - **Use Case** - Implements business operation (orchestrates domain objects)
 - **Input Port** - Interface defining use case contract (`extends UseCase<INPUT, OUTPUT>`)
 - **Command/Query** - Input model (Command for writes, Query for reads)
-- **Response** - Output model (standardized return type)
+- **Result** - Output model (standardized return type)
 - **Output Port** - Interface for infrastructure needs (repositories, gateways, publishers)
 
 **Organization:**
 ```
 application/
 ├── {usecasename}/          # e.g., createorder, findorder, cancelorder (lowercase)
-│   ├── *InputPort.java     # Interface: public interface CreateOrderInputPort extends UseCase<CreateOrderCommand, CreateOrderResponse>
+│   ├── *InputPort.java     # Interface: public interface CreateOrderInputPort extends UseCase<CreateOrderCommand, CreateOrderResult>
 │   ├── *UseCase.java       # Implementation: @Service public class CreateOrderUseCase implements CreateOrderInputPort
 │   ├── *Command.java       # Input model (for write operations)
 │   │   OR *Query.java      # Input model (for read operations)
-│   └── *Response.java      # Output model
+│   └── *Result.java      # Output model
 └── shared/                 # Shared output ports
     └── *Repository.java    # Repository interfaces, DomainEventPublisher, etc.
 ```
@@ -199,8 +199,8 @@ application/
 **Example:**
 ```java
 // Input Port Interface (defines contract)
-public interface CreateOrderInputPort extends UseCase<CreateOrderCommand, CreateOrderResponse> {
-    CreateOrderResponse execute(CreateOrderCommand command);
+public interface CreateOrderInputPort extends UseCase<CreateOrderCommand, CreateOrderResult> {
+    CreateOrderResult execute(CreateOrderCommand command);
 }
 
 // Use Case Implementation (orchestrates domain)
@@ -211,7 +211,7 @@ public class CreateOrderUseCase implements CreateOrderInputPort {
     private final DomainEventPublisher eventPublisher;  // Output Port
 
     @Override
-    public CreateOrderResponse execute(CreateOrderCommand command) {
+    public CreateOrderResult execute(CreateOrderCommand command) {
         // 1. Convert DTO to domain
         Order order = Order.create(command.customerId(), command.items());
 
@@ -225,7 +225,7 @@ public class CreateOrderUseCase implements CreateOrderInputPort {
         eventPublisher.publish(order.getDomainEvents());
 
         // 5. Convert domain to DTO
-        return CreateOrderResponse.from(order);
+        return CreateOrderResult.from(order);
     }
 }
 
@@ -233,9 +233,9 @@ public class CreateOrderUseCase implements CreateOrderInputPort {
 public record CreateOrderCommand(CustomerId customerId, List<OrderItemDto> items) {}
 
 // Output Model (Response)
-public record CreateOrderResponse(OrderId orderId, Money total, OrderStatus status) {
-    public static CreateOrderResponse from(Order order) {
-        return new CreateOrderResponse(order.getId(), order.getTotal(), order.getStatus());
+public record CreateOrderResult(OrderId orderId, Money total, OrderStatus status) {
+    public static CreateOrderResult from(Order order) {
+        return new CreateOrderResult(order.getId(), order.getTotal(), order.getStatus());
     }
 }
 ```
@@ -499,7 +499,7 @@ public interface Repository<T, ID> extends OutputPort {
 
 // Usage in a bounded context:
 // order/application/createorder/CreateOrderInputPort.java
-public interface CreateOrderInputPort extends UseCase<CreateOrderCommand, CreateOrderResponse> {
+public interface CreateOrderInputPort extends UseCase<CreateOrderCommand, CreateOrderResult> {
     // Inherits execute() method with specific types
 }
 
@@ -875,7 +875,7 @@ public class CreateOrderUseCase implements CreateOrderInputPort {
 
     @Transactional  // Transaction boundary at use case level
     @Override
-    public CreateOrderResponse execute(CreateOrderCommand command) {
+    public CreateOrderResult execute(CreateOrderCommand command) {
         // 1. Domain logic (within transaction)
         Order order = Order.create(command.customerId(), command.items());
 
@@ -885,7 +885,7 @@ public class CreateOrderUseCase implements CreateOrderInputPort {
         // 3. Publish events (after persistence, before commit)
         eventPublisher.publishAndClearEvents(order);
 
-        return CreateOrderResponse.from(order);
+        return CreateOrderResult.from(order);
     }
 }
 ```
@@ -996,35 +996,35 @@ com.company.project
 │   ├── application (use-case focused - each use case self-contained)
 │   │   ├── createorder (use case folder - lowercase, contains ALL related files)
 │   │   │   ├── CreateOrderInputPort.java
-│   │   │   │   interface CreateOrderInputPort extends UseCase<CreateOrderCommand, CreateOrderResponse> {}
+│   │   │   │   interface CreateOrderInputPort extends UseCase<CreateOrderCommand, CreateOrderResult> {}
 │   │   │   ├── CreateOrderUseCase.java
 │   │   │   │   @Service class CreateOrderUseCase implements CreateOrderInputPort { }
 │   │   │   ├── CreateOrderCommand.java
-│   │   │   └── CreateOrderResponse.java
+│   │   │   └── CreateOrderResult.java
 │   │   │
 │   │   ├── findorder (use case folder - lowercase, contains ALL related files)
 │   │   │   ├── FindOrderInputPort.java
-│   │   │   │   interface FindOrderInputPort extends UseCase<OrderQuery, OrderResponse> {}
+│   │   │   │   interface FindOrderInputPort extends UseCase<OrderQuery, OrderResult> {}
 │   │   │   ├── FindOrderUseCase.java
 │   │   │   │   @Service class FindOrderUseCase implements FindOrderInputPort { }
 │   │   │   ├── OrderQuery.java
-│   │   │   └── OrderResponse.java
+│   │   │   └── OrderResult.java
 │   │   │
 │   │   ├── cancelorder (use case folder - lowercase, contains ALL related files)
 │   │   │   ├── CancelOrderInputPort.java
-│   │   │   │   interface CancelOrderInputPort extends UseCase<CancelOrderCommand, CancelOrderResponse> {}
+│   │   │   │   interface CancelOrderInputPort extends UseCase<CancelOrderCommand, CancelOrderResult> {}
 │   │   │   ├── CancelOrderUseCase.java
 │   │   │   │   @Service class CancelOrderUseCase implements CancelOrderInputPort { }
 │   │   │   ├── CancelOrderCommand.java
-│   │   │   └── CancelOrderResponse.java
+│   │   │   └── CancelOrderResult.java
 │   │   │
 │   │   ├── updateorder (use case folder - lowercase, contains ALL related files)
 │   │   │   ├── UpdateOrderInputPort.java
-│   │   │   │   interface UpdateOrderInputPort extends UseCase<UpdateOrderCommand, UpdateOrderResponse> {}
+│   │   │   │   interface UpdateOrderInputPort extends UseCase<UpdateOrderCommand, UpdateOrderResult> {}
 │   │   │   ├── UpdateOrderUseCase.java
 │   │   │   │   @Service class UpdateOrderUseCase implements UpdateOrderInputPort { }
 │   │   │   ├── UpdateOrderCommand.java
-│   │   │   └── UpdateOrderResponse.java
+│   │   │   └── UpdateOrderResult.java
 │   │   │
 │   │   └── shared (SHARED OUTPUT PORTS - infrastructure dependencies)
 │   │       ├── OrderRepository.java (Output Port)
@@ -1078,17 +1078,17 @@ com.company.project
 │   │   │   ├── RegisterCustomerInputPort.java
 │   │   │   ├── RegisterCustomerUseCase.java
 │   │   │   ├── RegisterCustomerCommand.java
-│   │   │   └── RegisterCustomerResponse.java
+│   │   │   └── RegisterCustomerResult.java
 │   │   ├── updatecustomer
 │   │   │   ├── UpdateCustomerInputPort.java
 │   │   │   ├── UpdateCustomerUseCase.java
 │   │   │   ├── UpdateCustomerCommand.java
-│   │   │   └── UpdateCustomerResponse.java
+│   │   │   └── UpdateCustomerResult.java
 │   │   ├── findcustomer
 │   │   │   ├── FindCustomerInputPort.java
 │   │   │   ├── FindCustomerUseCase.java
 │   │   │   ├── CustomerQuery.java
-│   │   │   └── CustomerResponse.java
+│   │   │   └── CustomerResult.java
 │   │   └── shared
 │   │       ├── CustomerRepository.java
 │   │       └── EmailService.java
@@ -1103,17 +1103,17 @@ com.company.project
 │   │   │   ├── ReserveStockInputPort.java
 │   │   │   ├── ReserveStockUseCase.java
 │   │   │   ├── ReserveStockCommand.java
-│   │   │   └── ReserveStockResponse.java
+│   │   │   └── ReserveStockResult.java
 │   │   ├── releasestock
 │   │   │   ├── ReleaseStockInputPort.java
 │   │   │   ├── ReleaseStockUseCase.java
 │   │   │   ├── ReleaseStockCommand.java
-│   │   │   └── ReleaseStockResponse.java
+│   │   │   └── ReleaseStockResult.java
 │   │   ├── checkavailability
 │   │   │   ├── CheckAvailabilityInputPort.java
 │   │   │   ├── CheckAvailabilityUseCase.java
 │   │   │   ├── AvailabilityQuery.java
-│   │   │   └── AvailabilityResponse.java
+│   │   │   └── AvailabilityResult.java
 │   │   └── shared
 │   │       └── StockRepository.java
 │   └── adapter
@@ -1206,23 +1206,23 @@ This example shows how a bounded context's structure naturally evolves as comple
 APPLICATION LAYER
 ├── createorder/                   (USE CASE - All related files together)
 │   ├── CreateOrderInputPort.java      ← Input Port Interface
-│   │   interface CreateOrderInputPort extends UseCase<CreateOrderCommand, CreateOrderResponse>
+│   │   interface CreateOrderInputPort extends UseCase<CreateOrderCommand, CreateOrderResult>
 │   ├── CreateOrderUseCase.java        ← Use Case Implementation
 │   │   @Service class CreateOrderUseCase implements CreateOrderInputPort
 │   ├── CreateOrderCommand.java        ← Input Model (Command for writes)
-│   └── CreateOrderResponse.java       ← Output Model
+│   └── CreateOrderResult.java       ← Output Model
 │
 ├── findorder/                     (USE CASE - All related files together)
 │   ├── FindOrderInputPort.java        ← Input Port Interface
 │   ├── FindOrderUseCase.java          ← Use Case Implementation
 │   ├── OrderQuery.java                ← Input Model (Query for reads)
-│   └── OrderResponse.java             ← Output Model
+│   └── OrderResult.java             ← Output Model
 │
 ├── cancelorder/                   (USE CASE - All related files together)
 │   ├── CancelOrderInputPort.java      ← Input Port Interface
 │   ├── CancelOrderUseCase.java        ← Use Case Implementation
 │   ├── CancelOrderCommand.java        ← Input Model
-│   └── CancelOrderResponse.java       ← Output Model
+│   └── CancelOrderResult.java       ← Output Model
 │
 └── shared/                        (SHARED OUTPUT PORTS)
     ├── OrderRepository.java           ← Output Port (used by multiple use cases)
@@ -1241,12 +1241,12 @@ APPLICATION LAYER
 
 **Naming Convention:**
 - **Use Case Folders**: lowercase (e.g., `createorder`, `findorder`, `cancelorder`)
-- **Input Ports**: `*InputPort extends UseCase<INPUT, OUTPUT>` (e.g., `CreateOrderInputPort extends UseCase<CreateOrderCommand, CreateOrderResponse>`)
+- **Input Ports**: `*InputPort extends UseCase<INPUT, OUTPUT>` (e.g., `CreateOrderInputPort extends UseCase<CreateOrderCommand, CreateOrderResult>`)
 - **Output Ports**: Domain-specific names (e.g., `OrderRepository`, `PaymentGateway`, `DomainEventPublisher`)
 - **Use Case Implementation**: `*UseCase implements *InputPort` (e.g., `CreateOrderUseCase implements CreateOrderInputPort`)
 - **Commands**: `*Command` (e.g., `CreateOrderCommand`)
 - **Queries**: `*Query` (e.g., `OrderQuery`)
-- **Responses**: `*Response` (e.g., `CreateOrderResponse`)
+- **Results**: `*Result` (e.g., `CreateOrderResult`)
 - **Adapters**: `*Adapter` or specific suffixes (e.g., `InMemoryOrderRepository`, `OrderPageController`, `OrderMcpToolProvider`)
 
 > **Reference Implementation:** See [ai-architecture-sample](https://github.com/chbloemer/ai-architecture-sample) for concrete examples of this structure in practice.
