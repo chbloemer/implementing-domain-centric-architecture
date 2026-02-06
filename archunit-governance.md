@@ -345,13 +345,13 @@ static final ArchRule commands_should_follow_naming =
         .because("Input models should be named Command or Query");
 
 @ArchTest
-static final ArchRule responses_should_follow_naming =
+static final ArchRule results_should_follow_naming =
     classes()
         .that().resideInAPackage("..application..")
         .and().areRecords()
-        .and().haveSimpleNameMatching(".*Response.*")
-        .should().haveSimpleNameEndingWith("Response")
-        .because("Output models should end with 'Response'");
+        .and().haveSimpleNameMatching(".*Result.*")
+        .should().haveSimpleNameEndingWith("Result")
+        .because("Output models should end with 'Result'");
 ```
 
 ### 5. Port and Adapter Rules

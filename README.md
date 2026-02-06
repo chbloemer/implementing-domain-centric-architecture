@@ -31,6 +31,11 @@
 - [INTEGRATION PATTERNS](#integration-patterns)
   - [Same Bounded Context](#same-bounded-context)
   - [Different Bounded Contexts](#different-bounded-contexts)
+  - [Open Host Service Pattern](#open-host-service-pattern)
+  - [Composite Adapter Pattern](#composite-adapter-pattern)
+  - [Resolver Pattern](#resolver-pattern)
+  - [Enriched Read Model Pattern](#enriched-read-model-pattern)
+  - [Factory for Cross-Context Assembly](#factory-for-cross-context-assembly)
 - [GENERAL PRINCIPLES](#general-principles)
 - [ADDITIONAL TOPICS](#additional-topics)
 - [REFERENCES & FURTHER READING](#references--further-reading)
@@ -59,6 +64,15 @@
 | Architecture decisions | [adr-template.md](./adr-template.md) | Documenting choices |
 | E2E Testing | [e2e-testing.md](./e2e-testing.md) | Browser-based testing |
 | Quick lookup | [architecture-reference-guide.md](./architecture-reference-guide.md) | Already know DCA, need quick reference |
+
+### Cross-Context Integration Patterns
+| Pattern | Section | When to Use |
+|---------|---------|-------------|
+| Open Host Service | [OHS Pattern](#open-host-service-pattern) | Exposing context API to consumers |
+| Composite Adapter | [Composite Adapter](#composite-adapter-pattern) | Aggregating data from multiple OHS |
+| Resolver | [Resolver Pattern](#resolver-pattern) | Domain logic needing fresh external data |
+| Enriched Read Model | [Enriched Read Model](#enriched-read-model-pattern) | Comparing persisted vs current data |
+| Factory Assembly | [Factory for Cross-Context](#factory-for-cross-context-assembly) | Assembling complex domain objects |
 
 ---
 
@@ -232,7 +246,7 @@ public class CreateOrderUseCase implements CreateOrderInputPort {
 // Input Model (Command)
 public record CreateOrderCommand(CustomerId customerId, List<OrderItemDto> items) {}
 
-// Output Model (Response)
+// Output Model (Result)
 public record CreateOrderResult(OrderId orderId, Money total, OrderStatus status) {
     public static CreateOrderResult from(Order order) {
         return new CreateOrderResult(order.getId(), order.getTotal(), order.getStatus());
@@ -385,7 +399,7 @@ public record JwtIdentity(...) implements IdentityProvider.Identity { ... }
 
 - **InputPort** - Marker interface for all entry points to the application (called by driving adapters)
 - **OutputPort** - Marker interface for all dependencies the application needs (implemented by driven adapters)
-- **UseCase<INPUT, OUTPUT>** - Specific input port type with Command/Query → Response pattern
+- **UseCase<INPUT, OUTPUT>** - Specific input port type with Command/Query → Result pattern
 
 **What Belongs in Shared Kernel:**
 
@@ -423,26 +437,26 @@ START: I have code that might be shared
    │     YES ↓
    │
    ├─ Is it a marker interface or base type?
-   │     YES → Add to sharedkernel/domain/marker/
+   │     YES → Add to sharedkernel/marker/tactical/
    │     NO ↓
    │
    ├─ Is it a universal value object (Money, Address)?
-   │     YES → Add to sharedkernel/domain/common/
+   │     YES → Add to sharedkernel/domain/model/
    │     NO ↓
    │
    └─ Is it a base port interface (UseCase, Repository)?
-         YES → Add to sharedkernel/application/port/
+         YES → Add to sharedkernel/marker/port/
          NO → Probably shouldn't be in Shared Kernel
 ```
 
 **Example - Marker Interface:**
 ```java
-// sharedkernel/domain/marker/AggregateRoot.java
+// sharedkernel/marker/tactical/AggregateRoot.java
 public interface AggregateRoot<ID> extends Entity<ID> {
     // Marker interface - identifies aggregate roots for all contexts
 }
 
-// sharedkernel/domain/marker/Entity.java
+// sharedkernel/marker/tactical/Entity.java
 public interface Entity<ID> {
     ID getId();
     default boolean isSameAs(Entity<ID> other) {
@@ -453,7 +467,7 @@ public interface Entity<ID> {
 
 **Example - Shared Value Object:**
 ```java
-// sharedkernel/domain/common/Money.java
+// sharedkernel/domain/model/Money.java
 public record Money(BigDecimal amount, Currency currency) implements Value {
 
     public Money {
@@ -475,22 +489,22 @@ public record Money(BigDecimal amount, Currency currency) implements Value {
 
 **Example - Port Interface Hierarchy:**
 ```java
-// sharedkernel/application/port/InputPort.java
+// sharedkernel/marker/port/in/InputPort.java
 public interface InputPort {
     // Marker interface for all input ports (hexagonal architecture concept)
 }
 
-// sharedkernel/application/port/OutputPort.java
+// sharedkernel/marker/port/out/OutputPort.java
 public interface OutputPort {
     // Marker interface for all output ports (hexagonal architecture concept)
 }
 
-// sharedkernel/application/port/UseCase.java
+// sharedkernel/marker/port/in/UseCase.java
 public interface UseCase<INPUT, OUTPUT> extends InputPort {
     OUTPUT execute(INPUT input);
 }
 
-// sharedkernel/application/port/Repository.java
+// sharedkernel/marker/port/out/Repository.java
 public interface Repository<T, ID> extends OutputPort {
     Optional<T> findById(ID id);
     T save(T aggregate);
@@ -612,7 +626,7 @@ START: Something happened in the domain
 
 #### Event Publishing Rules
 - Use cases call DomainEventPublisher (Output Port) to publish events
-- DomainEventPublisher interface in application/port/out
+- DomainEventPublisher interface in marker/port/out
 - DomainEventPublisherAdapter in adapter/outgoing/messaging
 - Adapter converts domain events to integration events via mapper
 - Message broker (Kafka, RabbitMQ) used for async delivery
@@ -942,11 +956,9 @@ com.company.project/
 │                            Spring, JPA, Kafka config, Logging, Security
 │
 ├── sharedkernel/            [SHARED ACROSS ALL CONTEXTS - Keep Minimal]
-│   ├── domain/              DDD marker interfaces (AggregateRoot, Entity, Value, etc.)
-│   │                        Universal value objects (Money, Address, etc.)
-│   │                        Base domain exceptions
-│   └── application/port/    Base port interfaces (InputPort<INPUT, OUTPUT>, OutputPort)
-│                            Shared repository and publisher interfaces
+│   ├── marker/              DDD markers (tactical/, strategic/) and port interfaces (port/)
+│   ├── domain/model/        Universal value objects (Money, Address, etc.)
+│   └── adapter/outgoing/    Shared adapters (e.g., SpringDomainEventPublisher)
 │
 └── infrastructure/          [GLOBAL INFRASTRUCTURE]
                              Application-wide configuration and setup
@@ -1236,7 +1248,7 @@ APPLICATION LAYER
 1. **Each use case is self-contained** in its own folder with ALL related files
 2. **InputPort interface** lives WITH the use case, not in a separate port/in/ directory
 3. **UseCase implementation** lives WITH the InputPort in the same folder
-4. **Command/Query and Response** models live WITH the use case
+4. **Command/Query and Result** models live WITH the use case
 5. **Output Ports** (repositories, gateways) are shared across use cases in `shared/` directory
 
 **Naming Convention:**
@@ -1580,7 +1592,7 @@ public class ProductDataAdapter implements ProductDataPort {
 public class AddItemToCartUseCase {
     private final ProductDataPort productDataPort;  // NOT ProductCatalogService or RestTemplate
 
-    public AddItemToCartResponse execute(AddItemToCartCommand cmd) {
+    public AddItemToCartResult execute(AddItemToCartCommand cmd) {
         ProductData data = productDataPort.getProductData(cmd.productId(), cmd.qty())
             .orElseThrow(() -> new IllegalArgumentException("Product not found"));
         // ...
@@ -1600,6 +1612,299 @@ public class AddItemToCartUseCase {
 - ❌ Application layer never imports from other bounded contexts
 
 > **Note:** For multi-service integration patterns, see [Deployment Patterns](./deployment-patterns.md)
+
+### Composite Adapter Pattern
+
+When a context needs data from **multiple** Open Host Services, use a **Composite Adapter** to aggregate the data in one place.
+
+```
+Context A (Consumer)                    Provider Contexts
+┌─────────────────────────────────┐    ┌───────────────────┐
+│ application/shared/             │    │ ProductCatalog    │
+│   ArticleDataPort               │    │ (OHS - names)     │
+│   (output port)                 │    └───────────────────┘
+└────────────────┬────────────────┘    ┌───────────────────┐
+                 │ implements          │ Pricing           │
+                 ▼                     │ (OHS - prices)    │
+┌─────────────────────────────────┐    └───────────────────┘
+│ adapter/outgoing/product/       │    ┌───────────────────┐
+│   CompositeArticleDataAdapter   │───▶│ Inventory         │
+│   - ProductCatalogService       │    │ (OHS - stock)     │
+│   - PricingService              │    └───────────────────┘
+│   - InventoryService            │
+└─────────────────────────────────┘
+```
+
+**Example:**
+```java
+// adapter/outgoing/product/CompositeArticleDataAdapter.java
+@Component
+public class CompositeArticleDataAdapter implements ArticleDataPort {
+
+    private final ProductCatalogService productCatalogService;  // OHS
+    private final PricingService pricingService;                // OHS
+    private final InventoryService inventoryService;            // OHS
+
+    @Override
+    public Map<ProductId, ArticleData> getArticleData(Collection<ProductId> productIds) {
+        // Bulk fetch from each OHS
+        Map<ProductId, PriceInfo> prices = pricingService.getPrices(productIds);
+        Map<ProductId, StockInfo> stocks = inventoryService.getStock(productIds);
+
+        Map<ProductId, ArticleData> result = new HashMap<>();
+        for (ProductId productId : productIds) {
+            Optional<ProductInfo> productInfo = productCatalogService.getProductInfo(productId);
+            if (productInfo.isPresent()) {
+                result.put(productId, combineData(productId, productInfo.get(),
+                    prices.get(productId), stocks.get(productId)));
+            }
+        }
+        return result;
+    }
+}
+```
+
+**Rules:**
+- ✅ Composite adapter is the **ONLY** place that imports from multiple OHS
+- ✅ Aggregates data from multiple sources into context-specific DTO
+- ✅ Use cases depend on port interface, not the adapter
+- ✅ Isolates cross-context coupling to adapter layer
+- ❌ Use cases never import OHS directly
+
+### Resolver Pattern
+
+When **domain logic** needs external data (e.g., current prices) without infrastructure dependencies, use a **Resolver** - a functional interface injected into domain methods.
+
+```
+Application Layer                      Domain Layer
+┌───────────────────────────────┐     ┌─────────────────────────────────┐
+│ Use Case                      │     │ Aggregate                       │
+│ - fetches data via port       │     │ - calculateTotal(Resolver)      │
+│ - builds resolver from data   │────▶│ - validateItems(Resolver)       │
+│ - passes resolver to domain   │     │ - confirm(Resolver)             │
+└───────────────────────────────┘     └─────────────────────────────────┘
+```
+
+**Example:**
+```java
+// Domain - Functional interface for resolving prices
+@FunctionalInterface
+public interface ArticlePriceResolver {
+    ArticlePrice resolve(ProductId productId);
+
+    record ArticlePrice(Money price, boolean isAvailable, int availableStock) implements Value {}
+}
+
+// Domain - Aggregate uses resolver
+public class ShoppingCart extends BaseAggregateRoot<ShoppingCart, CartId> {
+
+    public Money calculateTotal(ArticlePriceResolver resolver) {
+        Money total = Money.zero();
+        for (CartItem item : items) {
+            ArticlePrice price = resolver.resolve(item.productId());
+            total = total.add(price.price().multiply(item.quantity()));
+        }
+        return total;
+    }
+
+    public CartValidationResult validateForCheckout(ArticlePriceResolver resolver) {
+        List<ValidationError> errors = new ArrayList<>();
+        for (CartItem item : items) {
+            ArticlePrice price = resolver.resolve(item.productId());
+            if (!price.isAvailable()) {
+                errors.add(ValidationError.productUnavailable(item.productId()));
+            }
+        }
+        return errors.isEmpty() ? CartValidationResult.valid()
+                                : CartValidationResult.withErrors(errors);
+    }
+}
+
+// Application - Use case builds resolver from fetched data
+@Service
+public class CheckoutCartUseCase implements CheckoutCartInputPort {
+    private final ArticleDataPort articleDataPort;  // Output port
+
+    @Override
+    public CheckoutCartResult execute(CheckoutCartCommand command) {
+        ShoppingCart cart = cartRepository.findById(command.cartId())...;
+
+        // Fetch data via port
+        Map<ProductId, ArticleData> articleData =
+            articleDataPort.getArticleData(cart.productIds());
+
+        // Build resolver from fetched data
+        ArticlePriceResolver resolver = productId -> {
+            ArticleData data = articleData.get(productId);
+            return new ArticlePrice(data.currentPrice(), data.isAvailable(), data.availableStock());
+        };
+
+        // Domain uses resolver - no infrastructure dependency
+        CartValidationResult validation = cart.validateForCheckout(resolver);
+        if (!validation.isValid()) {
+            throw new ValidationException(validation.errors());
+        }
+
+        cart.checkout();
+        return CheckoutCartResult.success(cart.id());
+    }
+}
+```
+
+**Benefits:**
+- ✅ Domain remains **framework-independent** - no external service calls
+- ✅ **Fresh data** - resolver provides current prices at execution time
+- ✅ **Testable** - easily mock resolver in domain tests
+- ✅ **Explicit dependency** - domain method signature shows data need
+
+**Rules:**
+- ✅ Resolver is a `@FunctionalInterface` in domain layer
+- ✅ Resolver's return type (`ArticlePrice`) is a domain Value Object
+- ✅ Use case fetches data via port, builds resolver, passes to domain
+- ❌ Domain never calls external services directly
+- ❌ Resolver never used to modify external state (read-only)
+
+### Enriched Read Model Pattern
+
+When you need to **combine persisted data with fresh external data** for rich domain logic (e.g., comparing original price to current price), create an **Enriched Read Model**.
+
+```
+Persisted Data                Fresh External Data        Enriched Read Model
+┌─────────────────┐          ┌─────────────────┐        ┌─────────────────────────┐
+│ CheckoutLineItem│    +     │ CheckoutArticle │   =    │ EnrichedCheckoutLineItem│
+│ - unitPrice     │          │ - currentPrice  │        │ - hasPriceChanged()     │
+│ - quantity      │          │ - isAvailable   │        │ - priceDifference()     │
+│ - productName   │          │ - availableStock│        │ - isValidForCheckout()  │
+└─────────────────┘          └─────────────────┘        └─────────────────────────┘
+```
+
+**Example:**
+```java
+// Enriched line item - combines persisted with current data
+public record EnrichedCheckoutLineItem(
+    CheckoutLineItem lineItem,     // Persisted at checkout start
+    CheckoutArticle currentArticle  // Fresh from external services
+) implements Value {
+
+    public Money currentLineTotal() {
+        return currentArticle.currentPrice().multiply(lineItem.quantity());
+    }
+
+    public boolean hasPriceChanged() {
+        return !lineItem.unitPrice().equals(currentArticle.currentPrice());
+    }
+
+    public Money priceDifference() {
+        return currentArticle.currentPrice().subtract(lineItem.unitPrice());
+    }
+
+    public boolean isValidForCheckout() {
+        return currentArticle.isAvailable() &&
+               currentArticle.availableStock() >= lineItem.quantity();
+    }
+}
+
+// Enriched cart - collection with business logic
+public record CheckoutCart(
+    CartId cartId,
+    CustomerId customerId,
+    List<EnrichedCheckoutLineItem> items
+) implements Value {
+
+    public boolean hasAnyPriceChanges() {
+        return items.stream().anyMatch(EnrichedCheckoutLineItem::hasPriceChanged);
+    }
+
+    public Money calculateCurrentSubtotal() {
+        return items.stream()
+            .map(EnrichedCheckoutLineItem::currentLineTotal)
+            .reduce(Money::add)
+            .orElse(Money.zero());
+    }
+
+    public boolean isValidForCheckout() {
+        return !items.isEmpty() &&
+               items.stream().allMatch(EnrichedCheckoutLineItem::isValidForCheckout);
+    }
+
+    public List<EnrichedCheckoutLineItem> invalidItems() {
+        return items.stream()
+            .filter(item -> !item.isValidForCheckout())
+            .toList();
+    }
+}
+```
+
+**Benefits:**
+- ✅ **Rich domain logic** - "Has price changed?" "Is stock sufficient?"
+- ✅ **Single query point** - all validation/calculation in one place
+- ✅ **Immutable** - Value Object, safe to pass around
+- ✅ **Real-world metaphor** - like a smart shopping cart display
+
+**Note:** Enriched Read Model is a Value Object, **not** an Aggregate. It has no lifecycle or events.
+
+### Factory for Cross-Context Assembly
+
+Use a **Factory** to assemble enriched domain objects from data fetched via ports.
+
+```java
+// Factory assembles enriched cart from multiple data sources
+public class CheckoutCartFactory implements Factory {
+
+    public CheckoutCart create(
+        CartId cartId,
+        CustomerId customerId,
+        List<CheckoutLineItem> lineItems,
+        Map<ProductId, CheckoutArticle> articleData
+    ) {
+        List<EnrichedCheckoutLineItem> enrichedItems = lineItems.stream()
+            .map(item -> {
+                CheckoutArticle article = articleData.get(item.productId());
+                if (article == null) {
+                    throw new IllegalArgumentException(
+                        "Article data not found for: " + item.productId());
+                }
+                return new EnrichedCheckoutLineItem(item, article);
+            })
+            .toList();
+
+        return new CheckoutCart(cartId, customerId, enrichedItems);
+    }
+}
+
+// Use case uses factory
+@Service
+public class StartCheckoutUseCase implements StartCheckoutInputPort {
+    private final CheckoutArticleDataPort articleDataPort;
+    private final CheckoutCartFactory checkoutCartFactory;
+
+    @Override
+    public StartCheckoutResult execute(StartCheckoutCommand command) {
+        // Fetch data via ports
+        List<CheckoutLineItem> lineItems = ...;
+        Map<ProductId, CheckoutArticle> articleData =
+            articleDataPort.getArticleData(productIds);
+
+        // Factory assembles enriched cart
+        CheckoutCart checkoutCart = checkoutCartFactory.create(
+            cartId, customerId, lineItems, articleData);
+
+        // Domain validation
+        if (!checkoutCart.isValidForCheckout()) {
+            throw new ValidationException(checkoutCart.invalidItems());
+        }
+
+        // ...
+    }
+}
+```
+
+**Rules:**
+- ✅ Factory is in **domain layer** (implements `Factory` marker)
+- ✅ Factory is **framework-independent** (no Spring annotations)
+- ✅ Application layer fetches data via ports, passes to factory
+- ✅ Factory validates all required data is present
+- ❌ Factory never fetches data itself (no port injection)
 
 ## GENERAL PRINCIPLES
 

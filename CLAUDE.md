@@ -49,7 +49,7 @@ application/
 │   ├── *InputPort.java      # Interface: extends UseCase<INPUT, OUTPUT>
 │   ├── *UseCase.java         # Implementation: implements *InputPort
 │   ├── *Command.java         # Input (writes) or *Query.java (reads)
-│   └── *Response.java        # Output
+│   └── *Result.java          # Output
 └── shared/
     └── *Repository.java      # Shared Output Ports (extends OutputPort)
 ```
@@ -83,12 +83,12 @@ com.company.project/
 
 ### Application Layer
 - **Use Case Folders**: lowercase (e.g., `createorder`, `additemtocart`, `getproductbyid`)
-- **Input Ports**: `*InputPort extends UseCase<Command, Response>` (extends `UseCase`, not `InputPort`)
+- **Input Ports**: `*InputPort extends UseCase<Command, Result>` (extends `UseCase`, not `InputPort`)
 - **Output Ports**: Domain names (e.g., `OrderRepository`, `PaymentGateway`, `DomainEventPublisher`)
 - **Use Cases**: `*UseCase implements *InputPort`
 - **Commands**: `*Command` (writes)
 - **Queries**: `*Query` (reads)
-- **Responses**: `*Response`
+- **Results**: `*Result`
 
 ### Adapter Layer
 - **Incoming Adapters**:
@@ -128,8 +128,8 @@ The [ai-architecture-sample](https://github.com/chbloemer/ai-architecture-sample
 - **No separate**: `exception/` packages at domain level
 
 ### Adapter Layer
-- **Incoming**: `web/`, `api/`, `event/`, `mcp/` (Model Context Protocol for AI integration)
-- **Outgoing**: Simplified `persistence/` with `InMemoryRepository` (no complex JPA entity structure in simple version)
+- **Incoming**: `web/`, `api/`, `event/`, `mcp/`, `openhost/` (Open Host Service for cross-context APIs)
+- **Outgoing**: `persistence/` (InMemory, JPA, JDBC), plus cross-context data adapters (e.g., `inventory/`, `pricing/`, `product/`)
 
 ### Technology Choices
 - Java 21+

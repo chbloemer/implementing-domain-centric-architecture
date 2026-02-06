@@ -467,7 +467,7 @@ public class ReserveStockUseCase implements ReserveStockInputPort {
     private final StockRepository stockRepository;  // Inventory's repository
 
     @Override
-    public ReserveStockResponse execute(ReserveStockCommand command) {
+    public ReserveStockResult execute(ReserveStockCommand command) {
         // Work with Inventory's domain language and rules
         // No knowledge of Order module's structure
 
@@ -480,7 +480,7 @@ public class ReserveStockUseCase implements ReserveStockInputPort {
             stockRepository.save(stock);
         }
 
-        return new ReserveStockResponse(true);
+        return new ReserveStockResult(true);
     }
 }
 ```
@@ -662,7 +662,7 @@ com.company.ecommerce
 │       │   │   ├── CreateOrderInputPort.java
 │       │   │   ├── CreateOrderUseCase.java
 │       │   │   ├── CreateOrderCommand.java
-│       │   │   └── CreateOrderResponse.java
+│       │   │   └── CreateOrderResult.java
 │       │   ├── findorder
 │       │   ├── cancelorder
 │       │   └── shared
@@ -817,7 +817,7 @@ com.company.ecommerce.order/
 
 **Characteristics:**
 - **Full subdirectory structure**
-- **Use case folders** with Command/Query/Response
+- **Use case folders** with Command/Query/Result
 - **60+ files**, well-organized
 - **Event mappers** - Domain Events → Integration Events
 - **Anti-Corruption Layers** - protect domain from external events

@@ -87,20 +87,20 @@ domain/
 ```
 application/
 ├── createorder/            # Each use case in own folder - ALL related files together
-│   ├── CreateOrderInputPort.java     # Interface: extends UseCase<COMMAND, RESPONSE>
+│   ├── CreateOrderInputPort.java     # Interface: extends UseCase<COMMAND, RESULT>
 │   ├── CreateOrderUseCase.java       # Implementation: implements CreateOrderInputPort
 │   ├── CreateOrderCommand.java       # Input model (Command for writes)
-│   └── CreateOrderResponse.java      # Output model
+│   └── CreateOrderResult.java        # Output model
 ├── findorder/              # Each use case in own folder - ALL related files together
-│   ├── FindOrderInputPort.java       # Interface: extends UseCase<QUERY, RESPONSE>
+│   ├── FindOrderInputPort.java       # Interface: extends UseCase<QUERY, RESULT>
 │   ├── FindOrderUseCase.java         # Implementation: implements FindOrderInputPort
 │   ├── OrderQuery.java               # Input model (Query for reads)
-│   └── OrderResponse.java            # Output model
+│   └── OrderResult.java              # Output model
 ├── cancelorder/            # Each use case in own folder - ALL related files together
 │   ├── CancelOrderInputPort.java
 │   ├── CancelOrderUseCase.java
 │   ├── CancelOrderCommand.java
-│   └── CancelOrderResponse.java
+│   └── CancelOrderResult.java
 └── shared/                 # Shared output ports (used by multiple use cases)
     ├── OrderRepository.java
     ├── DomainEventPublisher.java
@@ -108,7 +108,7 @@ application/
 ```
 
 **Key Characteristics:**
-- ✅ **High Cohesion** - InputPort interface + UseCase implementation + Command + Response all in one folder
+- ✅ **High Cohesion** - InputPort interface + UseCase implementation + Command + Result all in one folder
 - ✅ **Self-Contained** - Everything for one use case is together
 - ✅ **Single Responsibility** - One folder = one business operation
 - ✅ **Easy Navigation** - Find all related files in one place
@@ -129,11 +129,11 @@ application/
     ├── createorder/
     │   ├── CreateOrderUseCase.java      # Implementation separate from interface
     │   ├── CreateOrderCommand.java
-    │   └── CreateOrderResponse.java
+    │   └── CreateOrderResult.java
     └── findorder/
         ├── FindOrderUseCase.java
         ├── OrderQuery.java
-        └── OrderResponse.java
+        └── OrderResult.java
 ```
 
 **Why Self-Contained Pattern is Preferred:**
@@ -220,11 +220,13 @@ infrastructure/
 
 **Contains**:
 - **`sharedkernel.domain`** - Shared domain concepts:
-  - **`marker/`** - DDD pattern interfaces (AggregateRoot, Entity, Value, DomainEvent, etc.)
-  - **`common/`** - Universal value objects (Money, common IDs, Address)
-  - **`exception/`** - Base domain exceptions
-- **`sharedkernel.application`** - Shared application-layer concepts:
-  - **`port/`** - Base port interfaces (InputPort, OutputPort, UseCase, Repository, DomainEventPublisher)
+  - **`model/`** - Universal value objects (Money, common IDs, Address)
+  - **`specification/`** - Common Specification Pattern classes
+- **`sharedkernel.marker`** - Shared port marker interfaces:
+  - **`tactical/`** - tactical DDD pattern interfaces (AggregateRoot, Entity, Value, DomainEvent, etc.)
+  - **`strategic/`** - strategic DDD pattern interfaces (BoundedContext, SharedKernel, OpenHostService, etc.)
+  - **`port.in/`** - Input port interfaces (InputPort, UseCase)
+  - **`port.out/`** - Output port interfaces (OutputPort, Repository, DomainEventPublisher, IdentityProvider)
 
 **Dependencies**: NONE (framework-independent)
 
@@ -234,15 +236,16 @@ Input Ports (Driving/Primary)        Output Ports (Driven/Secondary)
 ┌────────────────────────────┐       ┌────────────────────────────┐
 │ InputPort (marker)         │       │ OutputPort (marker)        │
 │   └── UseCase<INPUT,OUTPUT>│       │   ├── Repository<T, ID>    │
-│         └── *InputPort     │       │   └── DomainEventPublisher │
-└────────────────────────────┘       └────────────────────────────┘
+│         └── *InputPort     │       │   ├── DomainEventPublisher │
+└────────────────────────────┘       │   └── IdentityProvider     │
+                                     └────────────────────────────┘
 ```
 
 **Example Structure**:
 ```
 sharedkernel/
-├── domain/
-│   ├── marker/                  ← DDD pattern interfaces
+├── marker/
+│   ├── tactical/                ← DDD tactical pattern interfaces
 │   │   ├── AggregateRoot.java   # public interface AggregateRoot<ID> extends Entity<ID> {}
 │   │   ├── Entity.java          # public interface Entity<ID> { ID getId(); }
 │   │   ├── Value.java           # public interface Value {}
@@ -250,7 +253,23 @@ sharedkernel/
 │   │   ├── DomainService.java   # Marker interface
 │   │   ├── Factory.java         # Marker interface
 │   │   └── Specification.java   # public interface Specification<T> { boolean isSatisfiedBy(T t); }
-│   ├── common/                  ← Universal value objects
+│   ├── strategic/               ← DDD strategic pattern interfaces
+│   │   ├── SharedKernel.java
+│   │   ├── BoundedContext.java
+│   │   └── OpenHostService.java
+│   ├── port/
+│   │   ├── in/                  ← Input port interfaces
+│   │   │   ├── InputPort.java   # public interface InputPort {} (marker)
+│   │   │   └── UseCase.java     # public interface UseCase<INPUT, OUTPUT> extends InputPort { OUTPUT execute(INPUT input); }
+│   │   └── out/                 ← Output port interfaces
+│   │       ├── OutputPort.java  # public interface OutputPort {} (marker)
+│   │       ├── Repository.java  # public interface Repository<T, ID> extends OutputPort {}
+│   │       ├── DomainEventPublisher.java  # public interface DomainEventPublisher extends OutputPort { void publish(DomainEvent event); }
+│   │       └── IdentityProvider.java      # public interface IdentityProvider extends OutputPort {}
+│   └── infrastructure/          ← Infrastructure markers
+│       └── AsyncInitialize.java # Marker annotation for async initialization
+├── domain/
+│   ├── model/                   ← Universal value objects
 │   │   ├── Money.java
 │   │   ├── ProductId.java
 │   │   ├── CustomerId.java
@@ -258,13 +277,9 @@ sharedkernel/
 │   └── exception/               ← Base domain exceptions
 │       ├── DomainException.java
 │       └── BusinessRuleViolationException.java
-└── application/
-    └── port/                    ← Base port interfaces
-        ├── InputPort.java       # public interface InputPort {} (marker)
-        ├── OutputPort.java      # public interface OutputPort {} (marker)
-        ├── UseCase.java         # public interface UseCase<INPUT, OUTPUT> extends InputPort { OUTPUT execute(INPUT input); }
-        ├── Repository.java      # public interface Repository<T, ID> extends OutputPort {}
-        └── DomainEventPublisher.java  # public interface DomainEventPublisher extends OutputPort { void publish(DomainEvent event); }
+└── adapter/
+    └── outgoing/                ← Shared adapters
+        └── SpringDomainEventPublisher.java
 ```
 
 **What Belongs in Shared Kernel:**
@@ -286,7 +301,6 @@ sharedkernel/
 - **Keep it minimal** - Changes affect ALL contexts
 - Shared Kernel = Code used by 2+ bounded contexts
 - Context-specific = Code used by 1 bounded context only
-- Each context can ALSO have its own `[context].common` for context-specific utilities
 - Only include code with **identical meaning** across all contexts
 - When in doubt, **duplicate rather than share**
 

@@ -28,7 +28,7 @@ State the decision clearly and concisely:
 - Be specific and unambiguous
 
 **Example:**
-> We will organize each use case in its own dedicated folder within the application layer, grouping all related files (InputPort interface, UseCase implementation, Command/Query, and Response) together.
+> We will organize each use case in its own dedicated folder within the application layer, grouping all related files (InputPort interface, UseCase implementation, Command/Query, and Result) together.
 >
 > **Structure:**
 > ```
@@ -37,7 +37,7 @@ State the decision clearly and concisely:
 > │   ├── CreateOrderInputPort.java
 > │   ├── CreateOrderUseCase.java
 > │   ├── CreateOrderCommand.java
-> │   └── CreateOrderResponse.java
+> │   └── CreateOrderResult.java
 > └── shared/
 >     └── OrderRepository.java
 > ```
