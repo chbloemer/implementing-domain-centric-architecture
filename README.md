@@ -772,6 +772,23 @@ START: Something happened in the domain
 - Repository uses domain types, not DTOs
 - Repository manages object lifecycle
 - Repository implementation in adapter layer
+- **Repository reads return copies, never the stored instance** — see below
+
+##### A repository hands out copies
+
+This is where the collection metaphor stops. A `Map`-backed adapter that returns `store.get(id)`
+hands out the instance it holds, so a caller who mutates an aggregate has already changed the store
+and `save()` is decoration. Against a database the same code loses the change silently, because
+loading a row constructs a new object — so the in-memory adapter has been hiding a missing `save()`
+in exactly the tests meant to catch it.
+
+Every adapter therefore maps back through the aggregate's `reconstitute` factory: the JDBC/JPA one
+because a row leaves it no choice, the in-memory one on purpose (copy on write *and* on read).
+Registered-but-unpublished domain events are not carried over — a stored aggregate is a fact, and
+re-reading it must not replay what the writer already published.
+
+Keep the adapters honest with a **contract test on the port** that every implementation runs,
+including the assertion that an unsaved mutation is invisible to the next reader.
 
 #### Transaction Rules
 - One transaction per use case execution
