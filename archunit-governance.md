@@ -448,6 +448,64 @@ static final ArchRule adapters_should_not_depend_on_each_other =
         .because("Adapters should not depend on each other directly");
 ```
 
+**Repository vs. Store.** Both are output ports, but they promise different things: a `Repository`
+manages an Aggregate Root by identity (`findById`, `save`, `delete`), a `Store` records or queries
+operational data that has no aggregate lifecycle (`record`, `count`, `exists`). Without rules the
+distinction is doctrine only — a `*Store` can quietly grow a `findById` and nothing fails.
+
+```java
+@ArchTest
+static final ArchRule stores_should_extend_the_store_marker =
+    classes()
+        .that().areInterfaces()
+        .and().haveSimpleNameEndingWith("Store")
+        .and().doNotHaveSimpleName("Store")
+        .should().beAssignableTo(Store.class)
+        .andShould().notBeAssignableTo(Repository.class)
+        .because("Repository is reserved for Aggregate Roots");
+
+@ArchTest
+static final ArchRule store_interfaces_should_be_shared_output_ports =
+    classes()
+        .that().areInterfaces()
+        .and().areAssignableTo(Store.class)
+        .and().doNotHaveSimpleName("Store")
+        .should().resideInAPackage("..application.shared..")
+        .because("A Store is an output port — the contract belongs to the application layer");
+
+@ArchTest
+static final ArchRule store_implementations_should_be_outgoing_adapters =
+    classes()
+        .that().areNotInterfaces()
+        .and().areAssignableTo(Store.class)
+        .should().resideInAPackage("..adapter.outgoing..")
+        .because("Store implementations are outgoing adapters");
+```
+
+The fourth rule cannot be written as a fluent `ArchRule` — it inspects method names on the matched
+interfaces, so it is expressed as a plain assertion:
+
+```java
+@ArchTest
+static void stores_should_not_have_repository_methods(JavaClasses classes) {
+    var violations = classes.stream()
+        .filter(c -> c.isInterface()
+                  && c.isAssignableTo(Store.class)
+                  && !c.getSimpleName().equals("Store"))
+        .flatMap(store -> store.getMethods().stream())
+        .filter(m -> Set.of("findById", "save", "deleteById", "delete").contains(m.getName()))
+        .map(m -> m.getFullName() + " — Repository semantics on a Store")
+        .toList();
+
+    assertThat(violations)
+        .as("Stores use record/count/exists semantics, not findById/save")
+        .isEmpty();
+}
+```
+
+If a Store legitimately needs `findById`, the stored object has identity — rename the port to
+`*Repository` and model the object as an Aggregate Root.
+
 ### 6. Shared Kernel Rules
 
 Ensure Shared Kernel remains independent and minimal.
