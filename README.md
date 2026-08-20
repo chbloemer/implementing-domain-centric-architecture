@@ -429,11 +429,11 @@ public interface CustomerAccountRepository extends Repository<CustomerAccount, C
 
 - Exists for **Value Objects, Events, or technical state** without identity-based access
 - Append-/record-style semantics: `record()`, `count()`, `exists()`, `reset()` — no `findById()` / `save()`
-- Extends `OutputPort` directly (NOT the `Repository` marker)
+- Extends the `Store` marker (`Store extends OutputPort`) — never the `Repository` marker
 - Implementation lives in `adapter.outgoing/`
 
 ```java
-public interface LoginProtectionStore extends OutputPort {
+public interface LoginProtectionStore extends Store {
     void record(LoginAttempt attempt);
     int  countRecentFailures(BaseStore baseStore, Email email, Duration window);
     boolean isLoginBlocked(BaseStore baseStore, Email email);
@@ -446,7 +446,7 @@ public interface LoginProtectionStore extends OutputPort {
 |---|---|---|
 | Stored object | Aggregate Root | Value Object / operational data |
 | Identity & lifecycle | yes — `findById`, `save`, `delete` | no — `record`, `count`, `exists` |
-| Marker | `extends Repository<T, ID>` | `extends OutputPort` |
+| Marker | `extends Repository<T, ID>` | `extends Store` |
 | Examples | `CustomerAccountRepository`, `OrderRepository` | `LoginProtectionStore`, `AuditLogStore`, `EventStore` |
 
 **Rules of thumb:**

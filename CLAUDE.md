@@ -111,12 +111,13 @@ The [ai-architecture-sample](https://github.com/chbloemer/ai-architecture-sample
   - `marker/tactical/` - DDD tactical patterns (Entity, Value, AggregateRoot, DomainEvent, etc.)
   - `marker/strategic/` - DDD strategic patterns (BoundedContext, SharedKernel, OpenHostService)
   - `marker/port/in/` - Input ports (InputPort, UseCase)
-  - `marker/port/out/` - Output ports (OutputPort, Repository, DomainEventPublisher, IdentityProvider)
+  - `marker/port/out/` - Output ports (OutputPort, Repository, Store, DomainEventPublisher, IdentityProvider)
 - **Port Interface Hierarchy**:
   - `InputPort` - Marker interface for all input ports (driving adapters)
   - `OutputPort` - Marker interface for all output ports (driven adapters)
   - `UseCase<INPUT, OUTPUT> extends InputPort` - Specific input port with Command/Query → Response pattern
-  - `Repository<T, ID> extends OutputPort` - Base repository interface
+  - `Repository<T, ID> extends OutputPort` - Base repository interface (Aggregate Roots only)
+  - `Store extends OutputPort` - Persistence port for operational data without aggregate lifecycle
   - `DomainEventPublisher extends OutputPort` - Event publishing interface
   - `IdentityProvider extends OutputPort` - With nested `Identity` and `IdentityType` interfaces
 - **Marker Interfaces**: Includes `Id.java`, `IntegrationEvent.java`, `BaseAggregateRoot.java`
