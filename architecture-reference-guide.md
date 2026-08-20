@@ -1683,12 +1683,15 @@ static final ArchRule input_adapters_should_not_be_accessed_by_output_adapters =
 
 ```java
 @ArchTest
-static final ArchRule shared_kernel_should_have_no_dependencies =
+static final ArchRule shared_kernel_should_not_depend_on_any_context =
     noClasses()
         .that().resideInAPackage("..sharedkernel..")
-        .should().dependOnClassesThat()
-            .resideInAnyPackage("..domain..", "..application..", "..adapter..", "..infrastructure..")
+        .should().dependOnClassesThat(
+            resideInAnyPackage(boundedContextPatterns())     // discovered from the marker
+                .and(not(resideInAPackage("..sharedkernel.."))))
         .because("Shared Kernel must be independent - no dependencies on contexts");
+        // Not "..domain..": the shared kernel has its own domain package, so that pattern
+        // would forbid it from using its own Money and ProductId.
 
 @ArchTest
 static final ArchRule shared_kernel_should_not_use_frameworks =

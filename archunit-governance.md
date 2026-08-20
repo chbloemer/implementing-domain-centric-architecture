@@ -509,16 +509,12 @@ Ensure Shared Kernel remains independent and minimal.
 
 ```java
 @ArchTest
-static final ArchRule shared_kernel_should_have_no_dependencies =
+static final ArchRule shared_kernel_should_not_depend_on_any_context =
     noClasses()
         .that().resideInAPackage("..sharedkernel..")
-        .should().dependOnClassesThat()
-            .resideInAnyPackage(
-                "..domain..",
-                "..application..",
-                "..adapter..",
-                "..infrastructure.."
-            )
+        .should().dependOnClassesThat(
+            resideInAnyPackage(boundedContextPatterns())   // discovered, see below
+                .and(not(resideInAPackage("..sharedkernel.."))))
         .because("Shared Kernel must be independent - no dependencies on bounded contexts");
 
 @ArchTest
@@ -534,18 +530,42 @@ static final ArchRule shared_kernel_should_not_use_frameworks =
             )
         .because("Shared Kernel must be framework-agnostic");
 
+// Discovered, not enumerated: one rule per context, forbidding every other context.
+// A context added tomorrow is covered without being registered here.
 @ArchTest
-static final ArchRule bounded_contexts_should_not_depend_on_each_other =
-    noClasses()
-        .that().resideInAPackage("..order..")
-        .should().dependOnClassesThat()
-            .resideInAnyPackage(
-                "..customer..",
-                "..inventory..",
-                "..payment.."
-            )
-        .because("Bounded contexts should not have direct dependencies on each other");
+static void bounded_contexts_should_not_depend_on_each_other(JavaClasses classes) {
+    var contexts = boundedContextPatterns();   // e.g. from @BoundedContext-annotated package-info
+    for (String source : contexts) {
+        String[] others = contexts.stream().filter(c -> !c.equals(source)).toArray(String[]::new);
+        if (others.length == 0) continue;
+        noClasses()
+            .that().resideInAPackage(source)
+            .should().dependOnClassesThat().resideInAnyPackage(others)
+            .allowEmptyShould(true)
+            .because("Bounded contexts must not have direct dependencies on each other")
+            .check(classes);
+    }
+}
 ```
+
+**Two traps worth naming, because both produce a rule that can never fail.**
+
+*Enumerating contexts.* `resideInAPackage("..order..")` versus a hand-written list of the other
+three works until somebody adds a fifth context — which is then unguarded, silently. Discover the
+contexts instead (a marker annotation on `package-info.java` is enough) and generate one rule per
+context. The rule set then grows with the codebase.
+
+*Excluding the shared kernel by pattern.* A shared kernel has its own `domain/` package, so
+forbidding `..sharedkernel..` from depending on `..domain..` forbids it from using **its own**
+`Money` and `ProductId`. The same cuts the other way: every context's domain must be able to reach
+`sharedkernel.domain..`, so a per-context isolation rule must not treat the shared kernel as a
+foreign context. Discovery solves this for free — the shared kernel carries a different marker than
+a bounded context, so it never lands among the forbidden targets and needs no allow-list.
+
+*And use `dependOnClassesThat`, never `accessClassesThat`.* ArchUnit counts an access as a method
+call or field access. A field, parameter or record component of a forbidden type is a dependency,
+not an access, so an isolation rule written with `accessClassesThat` stays green while a class holds
+the forbidden type outright.
 
 ### 7. Cyclic Dependency Rules
 
@@ -562,7 +582,7 @@ static final ArchRule no_cycles_in_packages =
 @ArchTest
 static final ArchRule no_cycles_between_bounded_contexts =
     slices()
-        .matching("com.company.project.(order|customer|inventory|payment).(*)..")
+        .matching("com.company.project.(*).(*)..")   // every context, not a fixed list
         .should().beFreeOfCycles()
         .because("Bounded contexts should not have cyclic dependencies");
 ```
