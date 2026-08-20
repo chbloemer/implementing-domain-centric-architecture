@@ -311,6 +311,30 @@ Revocation on email/role change: the relevant use case raises a domain event →
 
 ---
 
+### 6.3a What `sub` Identifies: the User or the Session
+
+`sub` can name the **user** or the **session**. The choice decides whether a single device can be
+logged out on its own.
+
+| | `sub` = user id | `sub` = session id, user in its own claim |
+|---|---|---|
+| Identifies | who is acting | which login is acting |
+| Revoke one device | not possible — the token says nothing about which session it is | delete that session's row |
+| Multiple devices | indistinguishable in the token | independent by construction |
+| Token size | one identifier | two |
+
+Prefer the **session id** as `sub` with the user referenced beside it. Independent logins per device
+are the normal expectation ("log me out everywhere" *and* "log this laptop out"), and only a session
+subject makes the second one expressible. The user reference stays in the token so a resource
+service still knows whose request it is without a lookup.
+
+This only pays off with a server-side session or refresh row: without one there is nothing to
+revoke, and a session id becomes a subject nobody can act on. Decide `sub` and the refresh store
+together — retrofitting a session subject later invalidates every token in flight.
+
+> `jti` is not a substitute. It is unique per *token*, so it changes on every rotation; a session id
+> is stable for the life of the login, which is what a "log out this device" action needs to name.
+
 ### 6.4 Encrypting a Claim (defense in depth)
 
 A signed JWT is integrity-protected but **not confidential**: anyone holding it can base64-decode
