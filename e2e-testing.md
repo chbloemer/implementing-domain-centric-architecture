@@ -537,6 +537,5 @@ e2e-tests:
 
 ## Related Documentation
 
-- [Testing Strategy](../dca-book/12-testing-strategy.md) - Overall testing approach
 - [ArchUnit Governance](./archunit-governance.md) - Architecture testing
 - [Reference Implementation](https://github.com/chbloemer/ai-architecture-sample) - Complete examples in `src/test-e2e/`
