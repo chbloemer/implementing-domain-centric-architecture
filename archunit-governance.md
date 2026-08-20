@@ -12,9 +12,11 @@
 2. [Setup and Configuration](#setup-and-configuration)
 3. [Core Rule Categories](#core-rule-categories)
 4. [Complete Test Suites](#complete-test-suites)
-5. [Best Practices](#best-practices)
-6. [CI/CD Integration](#cicd-integration)
-7. [Common Pitfalls and Solutions](#common-pitfalls-and-solutions)
+5. [Context-Specific Rule Sets](#context-specific-rule-sets)
+6. [Adoption Path (Tiers)](#adoption-path-tiers)
+7. [Best Practices](#best-practices)
+8. [CI/CD Integration](#cicd-integration)
+9. [Common Pitfalls and Solutions](#common-pitfalls-and-solutions)
 
 ---
 
@@ -651,6 +653,86 @@ public class NamingConventionTest {
             .because("Use cases belong in application layer");
 }
 ```
+
+---
+
+## Context-Specific Rule Sets
+
+Not every bounded context warrants the full rule set. A core context with a rich domain model benefits from all tactical rules; a simple supporting context (lookup data, basic admin CRUD) implemented as transaction script or active record would only fight rules written for aggregates it does not have.
+
+**Approach:** Each context declares its pattern style in an ADR:
+
+- **Domain-model contexts** — full tactical rule set: framework-free domain, aggregate rules, value-object immutability, domain-event immutability, etc.
+- **Transaction-script contexts** — structural baseline only: layer dependencies, no package cycles, bounded-context isolation
+
+Scope the tactical rules to the declared domain-model contexts:
+
+```java
+// Contexts that committed to a rich domain model (per ADR).
+// Transaction-script contexts (e.g., backoffice) are intentionally absent.
+private static final String[] DOMAIN_MODEL_CONTEXTS = {
+    "..order.domain..",
+    "..pricing.domain..",
+    "..inventory.domain.."
+};
+
+@ArchTest
+static final ArchRule value_objects_in_domain_model_contexts_are_immutable =
+    classes()
+        .that().resideInAnyPackage(DOMAIN_MODEL_CONTEXTS)
+        .and().implement(Value.class)
+        .should().haveOnlyFinalFields()
+        .because("Domain-model contexts committed to immutable Value Objects (see ADR)");
+```
+
+The structural baseline (layer dependencies, cycles, context isolation) still applies to **every** context — only the tactical DDD rules are scoped.
+
+---
+
+## Adoption Path (Tiers)
+
+Introduce rules in tiers, ordered by how statically verifiable and how settled each rule is — not all at once.
+
+### Tier 1 — Enforce Immediately
+
+Fully static, high consensus, no project-specific conventions needed:
+
+- Dependencies point inward; domain layer is framework-free
+- No package cycles
+- Bounded-context isolation (no direct cross-context imports)
+- Aggregates reference other aggregates by ID only
+- Repository interface/implementation split (interface in application, implementation in adapter)
+- Transactions only in the application layer
+- Value-object immutability
+- Controllers never reach repositories directly
+
+### Tier 2 — Needs Project Conventions
+
+Verifiable only after the team agrees on marker interfaces/annotations and a package contract:
+
+- DTO boundaries (adapters do not leak domain objects outward)
+- Published-language / integration-event rules
+- No public setters in domain classes
+- No injected repositories or services inside aggregates
+- Event shape and publishing rules
+- Naming conventions
+
+### Tier 3 — Warning-Level Fitness Functions
+
+Trends to observe, not pass/fail gates — report instead of failing the build:
+
+- Component size (classes per context or package)
+- Coupling metrics: instability, abstractness, distance from the main sequence (ArchUnit metrics API, `com.tngtech.archunit.library.metrics`)
+- Naming heuristics (e.g., flagging `*Manager` or `*Util` classes in the domain)
+
+### Not Statically Testable
+
+Some rules cannot be expressed as static checks at all. They belong in ADRs and review checklists:
+
+- Aggregates designed around true invariants, not data convenience
+- One aggregate modified per transaction
+- Saga / process-manager design
+- Pattern selection per context (domain model vs transaction script) — see [Context-Specific Rule Sets](#context-specific-rule-sets)
 
 ---
 

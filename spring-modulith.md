@@ -208,6 +208,8 @@ public class EventConfiguration {
 }
 ```
 
+**Built-in Transactional Outbox:** The registry is Spring Modulith's equivalent of the Transactional Outbox pattern. The event publication is persisted in the same transaction as the aggregate state change, so neither can exist without the other. Completion is tracked after the listener executes successfully, and incomplete publications can be resubmitted — giving at-least-once delivery. Externalized events (Kafka, RabbitMQ, etc.) get the same guarantee; a dedicated outbox table plus relay process is only needed outside Spring Modulith.
+
 ### Event Publishing Pattern
 
 **Publishing Domain Event (internal):**
@@ -294,6 +296,26 @@ class InventoryEventListener {
 - `Propagation.REQUIRES_NEW` ensures independent transaction
 - Failures trigger automatic retry (configured via Spring Modulith)
 - Anti-Corruption Layer protects consuming module's domain
+
+### Idempotent Consumers
+
+At-least-once delivery means every listener must expect duplicates and out-of-order arrival:
+
+```java
+@ApplicationModuleListener
+void on(OrderCreatedEvent event) {
+    if (processedEvents.contains(event.eventId())) {
+        return; // Duplicate delivery — already handled
+    }
+    reserveStock.execute(toCommand(event));
+    processedEvents.markProcessed(event.eventId());
+}
+```
+
+**Rules:**
+- **Deduplicate** — track processed event IDs in the consumer's own store, or make the operation naturally idempotent (e.g., `reserveStock(orderId)` upserts the reservation instead of inserting a new one)
+- **Tolerate out-of-order arrival** — never assume the previous event was already seen
+- **Never drop silently** — permanently failing events go to a dead-letter mechanism (e.g., alert plus manual resubmission of incomplete publications after retries are exhausted)
 
 ### Anti-Corruption Layer (ACL) Pattern
 

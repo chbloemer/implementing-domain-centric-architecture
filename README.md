@@ -36,6 +36,7 @@
   - [Resolver Pattern](#resolver-pattern)
   - [Enriched Read Model Pattern](#enriched-read-model-pattern)
   - [Factory for Cross-Context Assembly](#factory-for-cross-context-assembly)
+- [DEVIATIONS FROM THE LITERATURE](#deviations-from-the-literature)
 - [GENERAL PRINCIPLES](#general-principles)
 - [ADDITIONAL TOPICS](#additional-topics)
 - [REFERENCES & FURTHER READING](#references--further-reading)
@@ -626,6 +627,8 @@ public interface OrderRepository extends Repository<Order, OrderId> {
 - One transaction modifies one aggregate only
 - Eventual consistency between aggregates
 - Delete aggregate deletes all contained entities
+- Never inject repositories or services into aggregates — pass dependencies as method parameters
+- Protect against lost updates with optimistic concurrency: version field on the root, incremented per state change; persistence rejects saves with a stale expected version
 
 #### Domain Service Rules
 - Domain Service is stateless
@@ -658,6 +661,16 @@ public interface OrderRepository extends Repository<Order, OrderId> {
 - Event Mapper converts domain event → integration event DTO
 - Integration Events must be backward compatible (add fields, don't remove)
 - Integration Events contain only primitives and value types, no domain objects
+
+**Integration Event Payload Styles** — choose per event type:
+
+| Style | Payload | When |
+|---|---|---|
+| **Notification** | IDs only — consumer queries back via Open Host Service | Sensitive or large data; query-back doubles as authorization gate |
+| **Event-Carried State Transfer** | Relevant state snapshot | Consumer maintains a local cache/replica, avoids chatty query-backs |
+| **Domain Fact** | The business fact and its data | Consumer reacts to what happened, no replica needed |
+
+Invariant in all styles: flat, serializable, versioned — never aggregate references.
 
 **Decision Tree: Domain Event or Integration Event?**
 ```
@@ -700,6 +713,10 @@ START: Something happened in the domain
 - Event Consumer calls Input Port, never domain directly
 - Consuming bounded context maintains its own model
 - Eventual consistency between bounded contexts via events
+- Assume at-least-once delivery: consumers deduplicate (event ID or naturally idempotent operations)
+- Consumers tolerate out-of-order arrival (check event version/timestamp, never assume sequence)
+- Permanently failing events go to a dead-letter queue — never dropped silently
+- An event handler modifies at most one aggregate, in its own transaction
 
 #### General Domain Rules
 - Domain contains business logic only
@@ -828,7 +845,7 @@ START: Something happened in the domain
 
 #### Context Integration Rules
 - Make all context relationships explicit
-- Use Context Map to document relationships
+- Use Context Map to document relationships and each context's subdomain type (Core/Supporting/Generic)
 - Protect domain with Anti-Corruption Layer
 - Shared Kernel requires team coordination
 - Keep Shared Kernel small
@@ -841,6 +858,22 @@ START: Something happened in the domain
 - Supporting Subdomains support core
 - Generic Subdomains can be outsourced
 - Align Bounded Contexts with Subdomains
+
+#### Pattern Selection per Subdomain
+
+DCA's full pattern set is not mandatory for every bounded context. Apply tactical DDD where complexity warrants it — never to trivial domains. Choose per context, by subdomain type:
+
+| Subdomain | Business Logic Pattern | Architecture | Notes |
+|---|---|---|---|
+| **Core** | Rich domain model (aggregates, domain events) | Ports & Adapters, optionally CQRS / event sourcing | Full DCA rule set applies |
+| **Supporting** | Transaction script or active record | Simple layering | CRUD is not an anti-pattern here |
+| **Generic** | Buy / adopt (SaaS, open source) | Integrate via ACL | Don't build what you can buy |
+
+Rules:
+- Each bounded context declares its chosen pattern style in an ADR
+- Architecture tests activate the matching rule subset per context: domain-model contexts get the full tactical rules; transaction-script contexts only the structural baseline (layer dependencies, no cycles, context isolation) — see [ArchUnit Governance](./archunit-governance.md)
+- Consistency within a context matters; uniformity across contexts does not
+- Reclassify when a subdomain's importance changes (supporting → core happens) and upgrade the pattern with it — this is Progressive Complexity at the strategic level
 
 ### BOUNDARY CROSSING RULES
 
@@ -1965,6 +1998,22 @@ public class StartCheckoutUseCase implements StartCheckoutInputPort {
 - ✅ Application layer fetches data via ports, passes to factory
 - ✅ Factory validates all required data is present
 - ❌ Factory never fetches data itself (no port injection)
+
+## DEVIATIONS FROM THE LITERATURE
+
+DCA deliberately deviates from classic DDD literature in a few places. The deviations are conscious decisions, not oversights:
+
+### Repository Interfaces in the Application Layer
+
+Classic DDD (Evans, Vernon, Millett/Tune) places repository interfaces in the domain layer. DCA places them in the application layer as **output ports**: the use case owns the contract for what it needs from the outside world, the domain stays free of persistence concerns entirely. This follows Hexagonal/Clean Architecture port ownership consistently. See [ADR-008 in the reference implementation](https://github.com/chbloemer/ai-architecture-sample/blob/main/docs/architecture/adr/adr-008-repository-interfaces-as-output-ports.md) for the full rationale and rejected alternatives.
+
+### Repository vs. Store
+
+The literature knows only the Repository (one per aggregate root). DCA refines this with a second output-port type, the **Store**, for operational data without aggregate lifecycle (value objects, technical state) — see [Repository vs. Store](#repository-vs-store).
+
+### Pragmatic Domain-Layer Dependencies
+
+"Framework-free domain" is enforced strictly for frameworks (Spring, JPA, Jackson, messaging), but compile-time-only conveniences without runtime coupling (Lombok, `commons-lang3`, JSpecify nullability annotations) are permitted. The boundary is behavioral coupling, not the import statement.
 
 ## GENERAL PRINCIPLES
 
