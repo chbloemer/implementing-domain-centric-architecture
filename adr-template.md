@@ -159,8 +159,8 @@ Document relationships to other ADRs:
 - **Depends on:** ADR-XXX (prerequisite decisions)
 
 **Example:**
-- **Related to:** ADR-012 (Use Case Input/Output Models) - This decision builds on the input port pattern
-- **Depends on:** ADR-002 (Framework-Independent Domain) - Use cases must remain framework-agnostic
+- **Related to:** ADR-012 (Payment Retry Policy) - This decision builds on the retry window it defines
+- **Depends on:** ADR-002 (Payment Provider Abstraction) - Retries must go through the provider port
 
 ---
 
@@ -214,7 +214,7 @@ Links to additional information:
 Any additional context, clarifications, or information that doesn't fit elsewhere.
 
 **Example:**
-> This pattern is already in use in the payment context. See `/docs/architecture/adr/adr-012-....md` for a similar decision.
+> This pattern is already in use in the payment context. See `/docs/architecture/adr/adr-012-payment-retry-policy.md` for a similar decision.
 
 ---
 
