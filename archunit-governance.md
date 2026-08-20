@@ -293,6 +293,47 @@ static final ArchRule domain_events_should_be_in_domain_event_package =
         .because("Domain Events belong in domain event package");
 ```
 
+**Publishing the events is the use case's obligation.** Raising an event and storing the aggregate
+are two halves of one operation: an aggregate that is saved while still holding its events loses
+them, and — with an identity-mapped or in-memory repository, where the same instance stays around —
+they may be published later by an unrelated use case, out of context. Structural rules cannot see
+this, but a custom `ArchCondition` can:
+
+```java
+ArchCondition<JavaClass> publishAfterSaving =
+    new ArchCondition<>("publish the aggregate's domain events after saving it") {
+        @Override
+        public void check(JavaClass item, ConditionEvents events) {
+            boolean saves = item.getMethodCallsFromSelf().stream()
+                .anyMatch(call -> call.getTarget().getName().equals("save")
+                    && call.getTargetOwner().isAssignableTo(Repository.class));
+            if (!saves) {
+                return;
+            }
+            boolean publishes = item.getMethodCallsFromSelf().stream()
+                .anyMatch(call -> call.getTarget().getName().equals("publishAndClearEvents")
+                    && call.getTargetOwner().isAssignableTo(DomainEventPublisher.class));
+            events.add(publishes
+                ? SimpleConditionEvent.satisfied(item, item.getSimpleName() + " publishes after saving")
+                : SimpleConditionEvent.violated(item,
+                    item.getSimpleName() + " saves an aggregate without publishing its domain events"));
+        }
+    };
+
+@ArchTest
+static final ArchRule use_cases_that_save_must_publish =
+    classes()
+        .that().resideInAPackage("..application..")
+        .and().haveSimpleNameEndingWith("UseCase")
+        .and().areNotInterfaces()
+        .should(publishAfterSaving)
+        .because("Unpublished events are lost, and events left on a stored aggregate may surface later out of context");
+```
+
+Note the rule demands the call **unconditionally**, not only where an event is expected: whether an
+action raised one is the aggregate's business, and a use case that publishes only "when needed"
+breaks silently the day an aggregate starts raising an event it did not raise before.
+
 ### 4. Naming Convention Rules
 
 Enforce consistent naming across the codebase.
