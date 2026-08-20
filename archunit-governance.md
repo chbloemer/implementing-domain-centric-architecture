@@ -455,6 +455,51 @@ static final ArchRule adapters_should_not_depend_on_each_other =
         .because("Adapters should not depend on each other directly");
 ```
 
+**What a repository may hand back.** The often-quoted form of this rule is "repository methods
+return Aggregate Roots". As a positive requirement it is wrong: a repository legitimately returns a
+`boolean` from an `existsBy...`, a count, a page wrapper, or a Value Object composed for one use case
+— Vernon's *use-case optimal query*. The invariant worth enforcing is the prohibition. A repository
+must not hand out an Entity that is **not** an Aggregate Root, because a caller holding one can
+mutate part of an aggregate without passing its root, and the root's invariants never run.
+
+```java
+@ArchTest
+static void repositories_should_not_expose_non_root_entities(JavaClasses classes) {
+    var violations = classes.stream()
+        .filter(c -> c.isInterface() && c.isAssignableTo(Repository.class))
+        .flatMap(repo -> repo.getMethods().stream())
+        .flatMap(m -> typesInvolvedIn(m.getReturnType()).stream()
+            .filter(t -> t.isAssignableTo(Entity.class) && !t.isAssignableTo(AggregateRoot.class))
+            .map(t -> m.getFullName() + " exposes " + t.getName()))
+        .toList();
+
+    assertThat(violations).isEmpty();
+}
+
+// Recursive, because the forbidden type is almost never the raw return type.
+private static List<JavaClass> typesInvolvedIn(JavaType type) {
+    var involved = new ArrayList<JavaClass>();
+    var erasure = type.toErasure();
+    involved.add(erasure);
+    erasure.tryGetComponentType().ifPresent(involved::add);
+    if (type instanceof JavaParameterizedType p) {
+        p.getActualTypeArguments().forEach(arg -> involved.addAll(typesInvolvedIn(arg)));
+    } else if (type instanceof JavaWildcardType w) {
+        w.getUpperBounds().forEach(bound -> involved.addAll(typesInvolvedIn(bound)));
+    }
+    return involved;
+}
+```
+
+The traversal is the whole rule. A tempting shortcut — enumerate `List`, `Set` and `Collection` by
+name and call `tryGetComponentType()` on the raw type — inspects nothing at all: that method resolves
+**array** component types, so it returns empty for every collection. Add `Optional` to the name list
+and `Map<K, List<X>>` still walks through. Walk the type arguments instead and there is no list to
+keep current.
+
+Note the type-parameter side needs no rule. `Repository<T extends AggregateRoot<T, ID>, ID extends Id>`
+already makes a repository for a non-root entity a compile error.
+
 **Repository vs. Store.** Both are output ports, but they promise different things: a `Repository`
 manages an Aggregate Root by identity (`findById`, `save`, `delete`), a `Store` records or queries
 operational data that has no aggregate lifecycle (`record`, `count`, `exists`). Without rules the
