@@ -657,7 +657,7 @@ public interface OrderRepository extends Repository<Order, OrderId> {
 - Integration Events must be serializable (JSON, Protobuf, Avro)
 - Integration Events include: event ID, timestamp, correlation ID; the schema version and
   stable logical name are a **class property** via `@IntegrationEventType(name, version)` —
-  never a `version` data field on the instance (ADR-027)
+  never a `version` data field on the instance
 - Integration Events created by Event Mappers in outgoing adapters
 - Domain events never cross bounded context boundaries directly
 - Event Mapper converts domain event → integration event DTO
@@ -1262,7 +1262,7 @@ com.company.project
 │   │   │   ├── IntegrationEvent.java
 │   │   │   │   public interface IntegrationEvent { UUID eventId(); Instant occurredOn(); }
 │   │   │   ├── IntegrationEventType.java
-│   │   │   │   @interface IntegrationEventType { String name(); int version() default 1; }  // contract identity as class property (ADR-027)
+│   │   │   │   @interface IntegrationEventType { String name(); int version() default 1; }  // contract identity as class property
 │   │   │   ├── DomainService.java
 │   │   │   │   public interface DomainService {}
 │   │   │   ├── Factory.java
@@ -1290,7 +1290,7 @@ com.company.project
 │   │           │   }
 │   │           ├── IntegrationEventPublisher.java
 │   │           │   public interface IntegrationEventPublisher extends OutputPort {
-│   │           │     void publish(IntegrationEvent event);  // boundary-crossing facts (see ADR-026/027)
+│   │           │     void publish(IntegrationEvent event);  // boundary-crossing facts
 │   │           │   }
 │   │           └── IdentityProvider.java  // With nested Identity and IdentityType interfaces
 │   └── domain
@@ -2030,7 +2030,9 @@ DCA deliberately deviates from classic DDD literature in a few places. The devia
 
 ### Repository Interfaces in the Application Layer
 
-Classic DDD (Evans, Vernon, Millett/Tune) places repository interfaces in the domain layer. DCA places them in the application layer as **output ports**: the use case owns the contract for what it needs from the outside world, the domain stays free of persistence concerns entirely. This follows Hexagonal/Clean Architecture port ownership consistently. See [ADR-008 in the reference implementation](https://github.com/chbloemer/ai-architecture-sample/blob/main/docs/architecture/adr/adr-008-repository-interfaces-as-output-ports.md) for the full rationale and rejected alternatives.
+Classic DDD (Evans, Vernon, Millett/Tune) places repository interfaces in the domain layer. DCA places them in the application layer as **output ports**: the use case owns the contract for what it needs from the outside world, the domain stays free of persistence concerns entirely. This follows Hexagonal/Clean Architecture port ownership consistently.
+
+The rejected alternative is worth naming: keeping the interface in the domain layer means the domain declares what it wants from persistence, which reads as independence but is not. The signature — what can be looked up, by what, returning what — is shaped by the use cases that call it, so the domain would be declaring a contract on someone else's behalf and would have to change whenever a use case's needs change.
 
 ### Repository vs. Store
 

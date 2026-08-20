@@ -345,7 +345,7 @@ public interface OrderRepository {
 }
 ```
 
-**Repository interface placement:** Classic DDD literature (Evans, Vernon, Millett/Tune) places repository interfaces in the domain layer. DCA deliberately places them in the application layer as output ports — consistent with Hexagonal and Clean Architecture, where the use case owns the contracts it depends on. See [ADR-008: Repository Interfaces as Output Ports](../ai-architecture-sample/docs/architecture/adr/adr-008-repository-interfaces-as-output-ports.md) for the full rationale.
+**Repository interface placement:** Classic DDD literature (Evans, Vernon, Millett/Tune) places repository interfaces in the domain layer. DCA deliberately places them in the application layer as output ports — consistent with Hexagonal and Clean Architecture, where the use case owns the contracts it depends on. The domain then holds no opinion about persistence at all: it neither declares the interface nor knows that one exists.
 
 > **See:** [Domain-Centric Architecture - Aggregate Rules](./README.md#aggregate-rules)
 

@@ -410,15 +410,16 @@ ResponseCookie.from("shop-session", token)
 
 | | |
 |---|---|
-| `shop-identity` / `shop-session` split | ✅ done (ADR-030) |
-| Session expiry keeps the visitor identity | ✅ done (ADR-029) |
+| `shop-identity` / `shop-session` split | ✅ done |
+| Session expiry keeps the visitor identity | ✅ done |
 | Logout rotates the identity, clears the session | ✅ done |
 | `Secure` from configuration instead of hardcoded `false` | ✅ done (`app.security.jwt.secure-cookies`) |
 | `SameSite` on every cookie the subsystem writes | ✅ done (`Lax`) |
 | Path-scoped `shop-refresh` and the renewal flow | ❌ **deferred** — no refresh token exists |
 
-The deferral is deliberate and recorded in ADR-030: without a refresh token there is no revocation
-and no theft detection, so **the session cookie's lifetime is the blast radius of a stolen token**.
+The deferral is deliberate, and it has a price worth naming: without a refresh token there is no
+revocation and no theft detection, so **the session cookie's lifetime is the blast radius of a
+stolen token**.
 A renewal flow needs a persistent token store, rotation with reuse detection, and an endpoint to
 scope the cookie to — larger than everything above combined.
 
@@ -917,9 +918,6 @@ Decommission old key versions only after the maximum token lifetime has elapsed 
 
 - [`spring-modulith.md`](spring-modulith.md) — Spring Boot integration patterns
 - [`archunit-governance.md`](archunit-governance.md) — Enforcing architectural rules
-- [`ai-architecture-sample/docs/architecture/adr/`](../ai-architecture-sample/docs/architecture/adr/) — ADRs for the reference implementation, in particular
-  **ADR-029** (session expiry ends the session, not the identity) and **ADR-030** (separate cookies
-  for identity, session and renewal)
 
 > This guide was distilled from analyses of three production JWT implementations. Those analyses
 > described third-party systems and are deliberately not part of this repository; what they taught is

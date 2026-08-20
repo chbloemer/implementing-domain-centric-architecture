@@ -214,7 +214,7 @@ Links to additional information:
 Any additional context, clarifications, or information that doesn't fit elsewhere.
 
 **Example:**
-> This pattern has been successfully used in the ai-architecture-sample reference implementation. See `/docs/architecture/adr/adr-012-use-case-input-output-models.md` for a similar decision.
+> This pattern is already in use in the payment context. See `/docs/architecture/adr/adr-012-....md` for a similar decision.
 
 ---
 
