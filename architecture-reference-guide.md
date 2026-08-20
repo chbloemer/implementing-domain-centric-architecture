@@ -1692,16 +1692,31 @@ static final ArchRule input_adapters_should_not_be_accessed_by_output_adapters =
 #### 6. Shared Kernel Rules
 
 ```java
+// Contexts are discovered from the @BoundedContext marker on each context's
+// package-info, so the rule needs the imported classes — method-style test, not a
+// static field.
 @ArchTest
-static final ArchRule shared_kernel_should_not_depend_on_any_context =
+static void shared_kernel_should_not_depend_on_any_context(JavaClasses classes) {
     noClasses()
         .that().resideInAPackage("..sharedkernel..")
         .should().dependOnClassesThat(
-            resideInAnyPackage(boundedContextPatterns())     // discovered from the marker
+            resideInAnyPackage(boundedContextPatterns(classes))
                 .and(not(resideInAPackage("..sharedkernel.."))))
-        .because("Shared Kernel must be independent - no dependencies on contexts");
+        .because("Shared Kernel must be independent - no dependencies on contexts")
         // Not "..domain..": the shared kernel has its own domain package, so that pattern
         // would forbid it from using its own Money and ProductId.
+        .check(classes);
+}
+
+private static String[] boundedContextPatterns(JavaClasses classes) {
+    return StreamSupport.stream(classes.spliterator(), false)
+        .filter(c -> c.getSimpleName().equals("package-info"))
+        .filter(c -> c.isAnnotatedWith(BoundedContext.class))
+        .map(c -> c.getPackageName() + "..")
+        .distinct()
+        .sorted()
+        .toArray(String[]::new);
+}
 
 @ArchTest
 static final ArchRule shared_kernel_should_not_use_frameworks =

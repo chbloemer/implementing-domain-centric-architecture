@@ -563,14 +563,35 @@ If a Store legitimately needs `findById`, the stored object has identity — ren
 Ensure Shared Kernel remains independent and minimal.
 
 ```java
+// Contexts are discovered, not enumerated. Discovery needs the imported classes, so the
+// rule is a method-style test — a static-field rule is built before any classes exist.
 @ArchTest
-static final ArchRule shared_kernel_should_not_depend_on_any_context =
+static void shared_kernel_should_not_depend_on_any_context(JavaClasses classes) {
     noClasses()
         .that().resideInAPackage("..sharedkernel..")
         .should().dependOnClassesThat(
-            resideInAnyPackage(boundedContextPatterns())   // discovered, see below
+            resideInAnyPackage(boundedContextPatterns(classes))
                 .and(not(resideInAPackage("..sharedkernel.."))))
-        .because("Shared Kernel must be independent - no dependencies on bounded contexts");
+        .because("Shared Kernel must be independent - no dependencies on bounded contexts")
+        .check(classes);
+}
+
+// Every bounded context marks its root package once:
+//
+//   @BoundedContext
+//   package com.company.project.order;
+//
+// The helper turns those markers into ArchUnit package patterns. A context added
+// tomorrow is discovered on the next run — nothing to register.
+private static String[] boundedContextPatterns(JavaClasses classes) {
+    return StreamSupport.stream(classes.spliterator(), false)
+        .filter(c -> c.getSimpleName().equals("package-info"))
+        .filter(c -> c.isAnnotatedWith(BoundedContext.class))
+        .map(c -> c.getPackageName() + "..")
+        .distinct()
+        .sorted()
+        .toArray(String[]::new);
+}
 
 @ArchTest
 static final ArchRule shared_kernel_should_not_use_frameworks =
@@ -589,7 +610,7 @@ static final ArchRule shared_kernel_should_not_use_frameworks =
 // A context added tomorrow is covered without being registered here.
 @ArchTest
 static void bounded_contexts_should_not_depend_on_each_other(JavaClasses classes) {
-    var contexts = boundedContextPatterns();   // e.g. from @BoundedContext-annotated package-info
+    var contexts = List.of(boundedContextPatterns(classes));   // the helper defined above
     for (String source : contexts) {
         String[] others = contexts.stream().filter(c -> !c.equals(source)).toArray(String[]::new);
         if (others.length == 0) continue;
