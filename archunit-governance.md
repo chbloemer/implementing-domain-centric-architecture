@@ -257,12 +257,22 @@ static final ArchRule value_objects_should_be_immutable =
         .andShould().haveOnlyPrivateConstructors()  // Force factory methods
         .because("Value Objects must be immutable");
 
+// The Entity marker already declares id(), so requiring the method checks what the
+// compiler enforces. What is worth checking is that the identity is a value object:
+// a field whose *type* implements the Id marker. Matching on a field *name* ending in
+// "id" accepts valid, paid and uuid, and passes an entity that has no identity at all.
 @ArchTest
-static final ArchRule entities_should_have_identity =
-    classes()
-        .that().implement(Entity.class)
-        .should().haveMethod("getId")
-        .because("Entities must have identity via getId() method");
+static void entities_should_have_an_identity_field(JavaClasses classes) {
+    var violations = classes.stream()
+        .filter(c -> c.isAssignableTo(Entity.class) && !c.isInterface() && !c.getModifiers().contains(ABSTRACT))
+        .filter(c -> c.getAllFields().stream().noneMatch(f -> f.getRawType().isAssignableTo(Id.class)))
+        .map(JavaClass::getName)
+        .toList();
+
+    assertThat(violations)
+        .as("Entities must hold their identity as a field typed as an Id value object")
+        .isEmpty();
+}
 
 @ArchTest
 static final ArchRule domain_events_should_be_immutable =
@@ -709,12 +719,22 @@ public class DddPatternTest {
             .should().haveOnlyFinalFields()
             .because("Domain Events represent past facts and must be immutable");
 
+    // The Entity marker already declares id(), so requiring the method checks what the
+    // compiler enforces. What is worth checking is that the identity is a value object:
+    // a field whose *type* implements the Id marker. Matching on a field *name* ending in
+    // "id" accepts valid, paid and uuid, and passes an entity that has no identity at all.
     @ArchTest
-    static final ArchRule entities_have_identity =
-        classes()
-            .that().implement(Entity.class)
-            .should().haveMethod("getId")
-            .because("Entities must have identity");
+    static void entities_should_have_an_identity_field(JavaClasses classes) {
+        var violations = classes.stream()
+            .filter(c -> c.isAssignableTo(Entity.class) && !c.isInterface() && !c.getModifiers().contains(ABSTRACT))
+            .filter(c -> c.getAllFields().stream().noneMatch(f -> f.getRawType().isAssignableTo(Id.class)))
+            .map(JavaClass::getName)
+            .toList();
+
+        assertThat(violations)
+            .as("Entities must hold their identity as a field typed as an Id value object")
+            .isEmpty();
+    }
 
     @ArchTest
     static final ArchRule aggregates_are_in_domain_model =
