@@ -10,6 +10,21 @@ This is a **documentation repository** focused on Domain-Centric Architecture - 
 
 **Reference Implementation:** [ai-architecture-sample](https://github.com/chbloemer/ai-architecture-sample) - Complete working implementation demonstrating all patterns described in this documentation.
 
+## ⚠️ This guide stands alone — no links out
+
+A reader may have this repository and nothing else. Content may be used freely, **pointers may not**:
+
+- ❌ no links to `dca-book/…`, no `https://github.com/chbloemer/ai-architecture-sample`, no source
+  paths like `ai-architecture-sample/src/main/java/…`
+- ✅ describe the pattern, show the code inline, name a class — as self-contained text
+- ✅ links *within* this repository (`./spring-modulith.md`, `#section-anchors`)
+
+Direction is one-way: the sample may cite this guide, this guide never cites the sample. The
+knowledge bundle generated from these documents copies their text verbatim, so a link added here
+reappears there — where it is even less resolvable.
+
+**This file is exempt** (tooling context, not reader content).
+
 ## Documentation Structure
 
 The repository contains interconnected markdown documents:

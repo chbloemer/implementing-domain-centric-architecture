@@ -49,7 +49,6 @@
 | 1 | [Key Points](#key-points) | Core concepts and benefits |
 | 2 | [Four Layers](#key-points) | Layer diagram and dependency flow |
 | 3 | [Use Case Pattern](#use-case-pattern-with-input-ports) | Application layer organization |
-| 4 | [Reference Implementation](https://github.com/chbloemer/ai-architecture-sample) | Working code examples |
 
 ### Ready to Implement?
 - **[Java Package Structure](#java-package-structure)** - Copy-paste templates
@@ -144,9 +143,6 @@ For detailed patterns and rules, continue reading below. For specific topics, se
 ## Related Documentation
 
 This document describes the core Domain-Centric Architecture patterns and principles. For specific topics, see:
-
-### Reference Implementation
-- **[AI Architecture Sample](https://github.com/chbloemer/ai-architecture-sample)** - Complete reference implementation in Java/Spring Boot demonstrating all concepts in practice
 
 > **📝 Note on Examples:** This documentation uses **generic examples** (Order, Customer, Inventory contexts) for educational clarity. The actual reference implementation uses **Product Catalog**, **Shopping Cart**, and **Portal** contexts. Both approaches are valid - use examples that match your domain. Package names shown as `com.company.project.*` are placeholders; the reference implementation uses `de.sample.aiarchitecture.*`
 
@@ -1378,8 +1374,6 @@ APPLICATION LAYER
 - **Queries**: `*Query` (e.g., `OrderQuery`)
 - **Results**: `*Result` (e.g., `CreateOrderResult`)
 - **Adapters**: `*Adapter` or specific suffixes (e.g., `InMemoryOrderRepository`, `OrderPageController`, `OrderMcpToolProvider`)
-
-> **Reference Implementation:** See [ai-architecture-sample](https://github.com/chbloemer/ai-architecture-sample) for concrete examples of this structure in practice.
 
 **Benefits:**
 - ✅ **High Cohesion** - All files for one use case are together

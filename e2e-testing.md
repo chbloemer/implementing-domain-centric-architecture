@@ -538,4 +538,3 @@ e2e-tests:
 ## Related Documentation
 
 - [ArchUnit Governance](./archunit-governance.md) - Architecture testing
-- [Reference Implementation](https://github.com/chbloemer/ai-architecture-sample) - Complete examples in `src/test-e2e/`
