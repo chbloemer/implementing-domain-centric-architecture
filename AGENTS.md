@@ -148,8 +148,8 @@ The [dca-ecommerce-sample](https://github.com/chbloemer/dca-ecommerce-sample) de
 - **Outgoing**: `persistence/` (InMemory, JPA, JDBC), plus cross-context data adapters (e.g., `inventory/`, `pricing/`, `product/`)
 
 ### Technology Choices
-- Java 21+
-- Spring Boot 3.x
+- Java 25
+- Spring Boot 4.x
 - ArchUnit for architecture testing
 - In-memory storage for simplicity (ConcurrentHashMap)
 - Model Context Protocol (MCP) server for AI tooling
@@ -202,7 +202,7 @@ This is a documentation-focused repository:
 
 ## Java Version
 
-Examples assume Java 21+ with:
+Examples assume Java 25 with:
 - Records for Value Objects and DTOs
 - Modern Java features (var, text blocks where appropriate)
-- Spring Boot 3.x conventions
+- Spring Boot 4.x conventions
