@@ -655,7 +655,9 @@ public interface OrderRepository extends Repository<Order, OrderId> {
 - Integration Events defined in `{context}/adapter/outgoing/messaging/event/` package
 - Integration Events use past tense + "Event" suffix (e.g., OrderCreatedEvent)
 - Integration Events must be serializable (JSON, Protobuf, Avro)
-- Integration Events include: event ID, timestamp, version, correlation ID
+- Integration Events include: event ID, timestamp, correlation ID; the schema version and
+  stable logical name are a **class property** via `@IntegrationEventType(name, version)` —
+  never a `version` data field on the instance (ADR-027)
 - Integration Events created by Event Mappers in outgoing adapters
 - Domain events never cross bounded context boundaries directly
 - Event Mapper converts domain event → integration event DTO
@@ -1241,7 +1243,9 @@ com.company.project
 │   │   │   ├── DomainEvent.java
 │   │   │   │   public interface DomainEvent { UUID eventId(); Instant occurredOn(); }
 │   │   │   ├── IntegrationEvent.java
-│   │   │   │   public interface IntegrationEvent extends DomainEvent { int version(); }
+│   │   │   │   public interface IntegrationEvent { UUID eventId(); Instant occurredOn(); }
+│   │   │   ├── IntegrationEventType.java
+│   │   │   │   @interface IntegrationEventType { String name(); int version() default 1; }  // contract identity as class property (ADR-027)
 │   │   │   ├── DomainService.java
 │   │   │   │   public interface DomainService {}
 │   │   │   ├── Factory.java
@@ -1266,6 +1270,10 @@ com.company.project
 │   │           ├── DomainEventPublisher.java
 │   │           │   public interface DomainEventPublisher extends OutputPort {
 │   │           │     void publish(DomainEvent event);
+│   │           │   }
+│   │           ├── IntegrationEventPublisher.java
+│   │           │   public interface IntegrationEventPublisher extends OutputPort {
+│   │           │     void publish(IntegrationEvent event);  // boundary-crossing facts (see ADR-026/027)
 │   │           │   }
 │   │           └── IdentityProvider.java  // With nested Identity and IdentityType interfaces
 │   └── domain
