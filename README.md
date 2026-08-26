@@ -336,8 +336,11 @@ sharedkernel/
 │           ├── OutputPort.java    # Marker for all output ports
 │           ├── Repository.java    # Base repository: extends OutputPort (for Aggregate Roots)
 │           ├── Store.java         # Base store: extends OutputPort (for operational data)
-│           ├── DomainEventPublisher.java  # Event publishing: extends OutputPort
-│           └── IdentityProvider.java      # Identity abstraction with nested interfaces
+│           └── DomainEventPublisher.java  # Event publishing: extends OutputPort
+│
+├── application/
+│   └── shared/                    # Application-specific ports shared by several contexts
+│       └── IdentityProvider.java  # e.g. current caller's identity — NOT a generic marker
 │
 └── domain/
     ├── model/                     # Universal Value Objects
@@ -360,14 +363,20 @@ Input Ports (marker/port/in/)        Output Ports (marker/port/out/)
 │ InputPort (marker)         │       │ OutputPort (marker)        │
 │   └── UseCase<INPUT,OUTPUT>│       │   ├── Repository<T, ID>    │
 │         └── *InputPort     │       │   ├── Store               │
-└────────────────────────────┘       │   ├── DomainEventPublisher │
-                                     │   └── IdentityProvider     │
+└────────────────────────────┘       │   └── DomainEventPublisher │
                                      └────────────────────────────┘
 ```
 
-**Identity Pattern (Extensible Design):**
+Only *generic* contracts live under `marker/`: interfaces that assign an architectural role and
+carry no business methods. A port with domain-specific methods — even one that several bounded
+contexts share — is an **application-specific shared port** and belongs in
+`sharedkernel/application/shared/`, mirroring the `application/shared/` convention each bounded
+context uses for its own ports. The catalog and the bootstrap only pick up `marker/`, so this
+separation keeps project concepts out of the reusable building-block set.
+
+**Example — an application-specific shared port (Identity):**
 ```java
-// In sharedkernel/marker/port/out/IdentityProvider.java
+// In sharedkernel/application/shared/IdentityProvider.java — project-specific, not a marker
 public interface IdentityProvider extends OutputPort {
     Identity getCurrentIdentity();
 
@@ -1288,7 +1297,6 @@ com.company.project
 │   │           │   public interface IntegrationEventPublisher extends OutputPort {
 │   │           │     void publish(IntegrationEvent event);  // boundary-crossing facts
 │   │           │   }
-│   │           └── IdentityProvider.java  // With nested Identity and IdentityType interfaces
 │   └── domain
 │       ├── model (Universal value objects)
 │       │   ├── Money.java
