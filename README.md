@@ -327,7 +327,10 @@ sharedkernel/
 │   ├── strategic/                 # DDD Strategic Patterns
 │   │   ├── SharedKernel.java      # Annotation for shared kernel packages
 │   │   ├── BoundedContext.java    # Annotation for bounded context packages
-│   │   └── OpenHostService.java   # Marker for Open Host Service adapters
+│   │   ├── OpenHostService.java   # Marker for Open Host Service adapters
+│   │   ├── Upstream.java          # Declares an upstream context (ACL or Conformist, via API or events)
+│   │   ├── ExternalUpstream.java  # Declares an external system as upstream/downstream
+│   │   └── Partnership.java       # Declares a mutual Partnership with another context
 │   └── port/                      # Hexagonal Architecture Ports
 │       ├── in/                    # Input Ports (Driving/Primary)
 │       │   ├── InputPort.java     # Marker for all input ports
@@ -868,8 +871,10 @@ including the assertion that an unsaved mutation is invisible to the next reader
 > **Note:** For deployment variations including multi-service bounded contexts, see [Deployment Patterns](./deployment-patterns.md)
 
 #### Context Integration Rules
-- Make all context relationships explicit
-- Use Context Map to document relationships and each context's subdomain type (Core/Supporting/Generic)
+- Make all context relationships explicit — declare them in code on each context's `package-info.java`
+  (`@Upstream`, `@ExternalUpstream`, `@Partnership`, see [Declaring Context Relationships in Code](#declaring-context-relationships-in-code))
+- Use Context Map to document relationships and each context's subdomain type (Core/Supporting/Generic);
+  generate it from the declarations so it cannot drift
 - Protect domain with Anti-Corruption Layer
 - Shared Kernel requires team coordination
 - Keep Shared Kernel small
@@ -1594,6 +1599,57 @@ Order Context                                     Inventory Context
 - Domain events via message broker
 - REST API with DTOs
 - Shared Kernel (minimal, coordinated)
+
+### Declaring Context Relationships in Code
+
+Context-map relationships are declared on the bounded context's `package-info.java`, next to
+`@BoundedContext`. The declaration is the single source of truth: architecture tests verify that the
+declared relationships match the actual dependencies, and the human-readable context map (table +
+diagram) is rendered from the same annotations — an **executable context map** that cannot drift.
+
+```java
+// checkout/package-info.java
+@BoundedContext(name = "Checkout", description = "Checkout process, order placement, payment orchestration")
+@Upstream(
+    context = "product",
+    translation = Upstream.Translation.ANTI_CORRUPTION_LAYER,
+    via = Upstream.Consumes.API,
+    rationale = "Product data is translated into checkout's own article types")
+@Upstream(
+    context = "cart",
+    translation = Upstream.Translation.CONFORMIST,
+    via = Upstream.Consumes.EVENTS,
+    rationale = "CartCheckedOutEvent is consumed as published, no translation needed")
+@ExternalUpstream(
+    name = "Payment Provider",
+    translation = Upstream.Translation.ANTI_CORRUPTION_LAYER,
+    interaction = ExternalUpstream.Interaction.OUTBOUND,
+    protocol = "REST",
+    contractPackages = "..checkout.adapter.outgoing.payment..")
+package com.company.project.checkout;
+```
+
+| Annotation | Declares | Key attributes |
+|------------|----------|----------------|
+| `@Upstream` (repeatable) | this context is **downstream** of `context` | `translation` = `ANTI_CORRUPTION_LAYER` \| `CONFORMIST`; `via` = `API` \| `EVENTS`; `status` = `IMPLEMENTED` \| `PLANNED`; `rationale` |
+| `@ExternalUpstream` (repeatable) | an **external system** the context talks to | `interaction` = `OUTBOUND` \| `INBOUND`; `protocol`, `exchanges`, `contractPackages` |
+| `@Partnership` (repeatable) | mutual, coordinated evolution with `context` | `rationale` |
+| `@OpenHostService` | this adapter is a published API for other contexts | on the adapter class, not the package |
+| `@SharedKernel` | the package is the shared kernel | on `package-info.java` |
+
+Rules the declarations enable (see [ArchUnit Governance](./archunit-governance.md)):
+
+- Every cross-context dependency in code must be covered by an `@Upstream`/`@Partnership` declaration
+  (undeclared coupling fails the build).
+- Every declared relationship with `status = IMPLEMENTED` must have a matching dependency (dead
+  declarations fail the build); `PLANNED` relationships are exempt.
+- `ANTI_CORRUPTION_LAYER`: the upstream's contract types must stay inside the matching outgoing
+  adapter (or event consumer) — they never leak into application or domain.
+- `CONFORMIST`: the upstream's contract types may be used as-is in the application layer, but still
+  never reach the domain layer — conformism does not suspend domain purity.
+- Declarations must be well-formed: target context exists, never the declaring context itself, unique
+  per context and channel, `@Partnership` symmetric on both sides, and consistent with Spring Modulith
+  `allowedDependencies` where used.
 
 ### Open Host Service Pattern
 
