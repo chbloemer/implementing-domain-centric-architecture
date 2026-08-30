@@ -15,7 +15,7 @@ This is a **documentation repository** focused on Domain-Centric Architecture - 
 A reader may have this repository and nothing else. Content may be used freely, **pointers may not**:
 
 - ❌ no links to `dca-book/…`, no `https://github.com/chbloemer/dca-ecommerce-sample`, no source
-  paths like `dca-ecommerce-sample/src/main/java/…`
+  paths like `dca-ecommerce-sample-java/src/main/java/…`
 - ✅ describe the pattern, show the code inline, name a class — as self-contained text
 - ✅ links *within* this repository (`./spring-modulith.md`, `#section-anchors`)
 

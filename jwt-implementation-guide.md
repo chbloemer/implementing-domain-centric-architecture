@@ -9,7 +9,7 @@ Two concerns that must be kept separate:
 - **JWT Session Token (access token):** Stateless, short-lived, validated by signature + `exp` only — no DB lookup per request.
 - **Login State Management (refresh token):** Stateful, DB-backed, revocable by deleting a row.
 
-**What the `dca-ecommerce-sample` has today:**
+**What the `dca-ecommerce-sample-java` has today:**
 - `JwtTokenService` — signs/verifies tokens using **HS256** (symmetric)
 - `JwtIdentitySession` — manages a visitor cookie (`shop-identity`) and access cookie; `Secure=false` hardcoded
 - `JwtAuthenticationFilter` — validates the access token per request
@@ -249,7 +249,7 @@ Using these names instead of ad-hoc equivalents (`userId`, `firstName`, `custome
 | `softLoginId` | String | Effective user identifier in soft login tokens — present only when `loginTyp == "SOFT"` |
 | `tenant` | String | Tenant/country scope (e.g. `"DE"`, `"AT"`, `"CH"`). Required for multi-country platforms. Verifying services MUST reject tokens whose `tenant` value does not match the service's configured scope |
 
-**`cid` vs `sub`:** `sub` is the immutable technical identity (a UUID that never changes, even if the email changes). `cid` is the customer-facing identifier that may appear on order confirmations and support tickets. In the `dca-ecommerce-sample`, `UserId` currently serves both roles; a production system may issue them separately.
+**`cid` vs `sub`:** `sub` is the immutable technical identity (a UUID that never changes, even if the email changes). `cid` is the customer-facing identifier that may appear on order confirmations and support tickets. In the `dca-ecommerce-sample-java`, `UserId` currently serves both roles; a production system may issue them separately.
 
 **`tenant` / multi-country:** In platforms serving multiple countries or storefronts, the `tenant` claim (sometimes called `mandant`) prevents a token issued for one country's shop from being accepted by another country's services. Validation logic: `if (!token.tenant().equals(serviceConfig.tenant())) throw new InvalidTenantException()`.
 
@@ -406,7 +406,7 @@ ResponseCookie.from("shop-session", token)
     .build();
 ```
 
-**Status in `dca-ecommerce-sample`:**
+**Status in `dca-ecommerce-sample-java`:**
 
 | | |
 |---|---|
@@ -828,7 +828,7 @@ Each consuming service wires these into beans and provides its own `JwksEndpoint
 
 ### Principal Modeling: Adapter View vs Domain View
 
-Model the authenticated principal as a **sealed type** so anonymous vs. authenticated is exhaustive and type-checked, rather than a nullable user object (the `dca-ecommerce-sample` already follows this with its sealed `JwtIdentity`):
+Model the authenticated principal as a **sealed type** so anonymous vs. authenticated is exhaustive and type-checked, rather than a nullable user object (the `dca-ecommerce-sample-java` already follows this with its sealed `JwtIdentity`):
 
 ```java
 sealed interface User permits Guest, Registered {
