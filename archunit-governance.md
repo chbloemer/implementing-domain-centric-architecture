@@ -437,13 +437,20 @@ static final ArchRule adapters_should_implement_ports =
         .orShould().beAnnotatedWith("Repository")
         .because("Outbound adapters should implement output ports");
 
+// A driving adapter drives the application *through its port*. Depending on the
+// application package is not enough to express that: the use case class lives there
+// too, so the rule below has to name the implementation and forbid it.
 @ArchTest
-static final ArchRule input_adapters_should_call_input_ports =
-    classes()
+static final ArchRule input_adapters_should_depend_on_input_ports_not_use_case_classes =
+    noClasses()
         .that().resideInAPackage("..adapter.incoming..")
-        .should().dependOnClassesThat()
-            .resideInAnyPackage("..application..")
-        .because("Input adapters should only depend on input ports, not implementations");
+        .should().dependOnClassesThat(
+            describe(
+                "are use case implementations rather than input ports",
+                javaClass -> !javaClass.isInterface() && javaClass.isAssignableTo(InputPort.class)))
+        .because("Injecting the concrete use case couples the adapter to one realisation, "
+            + "defeats the Dependency Inversion Principle the port exists for, and makes the "
+            + "adapter untestable without the real use case and everything it depends on");
 
 @ArchTest
 static final ArchRule adapters_should_not_depend_on_each_other =
