@@ -975,6 +975,7 @@ Fully static, high consensus, no project-specific conventions needed:
 - Aggregates reference other aggregates by ID only
 - Repository interface/implementation split (interface in application, implementation in adapter)
 - Transactions only in the application layer
+- No remote-capable output port called inside a `@Transactional` use case (only `Repository`, `Store`, event publishers, `UnitOfWork`)
 - Value-object immutability
 - Controllers never reach repositories directly
 

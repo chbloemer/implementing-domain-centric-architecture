@@ -993,7 +993,9 @@ public class OrderExceptionHandler {
 #### Transaction Boundary Placement
 - **Transaction boundaries live at the use case level** (application layer)
 - One transaction = one aggregate modification (single aggregate rule)
-- Use `@Transactional` (or equivalent) on use case implementations
+- Use `@Transactional` (or equivalent) on use case implementations **whose work is entirely local** — repositories, stores, event publishers
+- **Never call a remote-capable port inside the transaction.** A port that may leave the process (another context's API, a payment provider, a mail gateway) called inside `@Transactional` holds the database connection for the remote round trip; under load the pool runs dry, and a rollback cannot undo the remote effect
+- Use cases that need such a port **draw the boundary by hand** with the `UnitOfWork` output port: remote reads first, then `unitOfWork.run(load, mutate, save, publish)`; remote effects after the commit, as a reaction to an integration event
 - Domain layer is transaction-agnostic
 
 #### Cross-Aggregate Consistency
@@ -1034,6 +1036,35 @@ Inventory Aggregate modified → StockReserved event published
     ↓ (async, separate transaction)
 Customer Aggregate notified → Loyalty points updated
 ```
+
+#### Remote Port Example — Boundary Drawn by Hand
+```java
+@Service                                   // no class-level @Transactional
+public class AddItemToCartUseCase implements AddItemToCartInputPort {
+
+    private final ShoppingCartRepository carts;
+    private final ArticleDataPort articles;          // reaches another context — remote-capable
+    private final DomainEventPublisher eventPublisher;
+    private final UnitOfWork unitOfWork;             // building-blocks output port → TransactionTemplate
+
+    @Override
+    public AddItemToCartResult execute(AddItemToCartCommand command) {
+        // 1. Remote-capable read — outside the transaction
+        CartArticle article = articles.getArticleData(command.productId()).orElseThrow();
+
+        // 2. Short transaction: load, mutate, save, publish
+        return unitOfWork.run(() -> {
+            ShoppingCart cart = carts.findById(command.cartId()).orElseThrow();
+            cart.addItem(command.productId(), command.quantity(), Price.of(article.currentPrice()));
+            carts.save(cart);
+            eventPublisher.publishAndClearEvents(cart);
+            return AddItemToCartResult.from(cart);
+        });
+    }
+}
+```
+
+Two rules of the DCA catalog make this a compile-time fact: `DCA-USE-012` — a use case that publishes domain events is `@Transactional` **or** uses `UnitOfWork.run`; `DCA-USE-013` — a `@Transactional` use case calls no output port other than `Repository`, `Store`, `DomainEventPublisher`, `IntegrationEventPublisher`, `UnitOfWork`. In .NET the boundary is a decorator around `IUseCase<,>` or `IUnitOfWork.RunAsync`; `DCA-NET-006` keeps EF Core, `System.Data` and `System.Transactions` out of the application layer.
 
 **Note:** For complex multi-aggregate workflows, consider the **Saga pattern** (orchestration or choreography). This is an advanced topic beyond the scope of basic domain-centric architecture.
 
@@ -1301,6 +1332,10 @@ com.company.project
 │   │           ├── IntegrationEventPublisher.java
 │   │           │   public interface IntegrationEventPublisher extends OutputPort {
 │   │           │     void publish(IntegrationEvent event);  // boundary-crossing facts
+│   │           │   }
+│   │           ├── UnitOfWork.java
+│   │           │   public interface UnitOfWork extends OutputPort {
+│   │           │     <T> T run(Supplier<T> work);        // explicit transaction boundary
 │   │           │   }
 │   └── domain
 │       ├── model (Universal value objects)
