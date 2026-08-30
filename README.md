@@ -1064,7 +1064,7 @@ public class AddItemToCartUseCase implements AddItemToCartInputPort {
 }
 ```
 
-Two rules of the DCA catalog make this a compile-time fact: `DCA-USE-012` — a use case that publishes domain events is `@Transactional` **or** uses `TransactionBoundary.run`; `DCA-USE-013` — a `@Transactional` use case calls no output port other than `Repository`, `Store`, `DomainEventPublisher`, `IntegrationEventPublisher`, `TransactionBoundary`. In .NET the boundary is a decorator around `IUseCase<,>` or `ITransactionBoundary.InTransactionAsync`; `DCA-NET-006` keeps EF Core, `System.Data` and `System.Transactions` out of the application layer.
+Two rules of the DCA catalog make this a compile-time fact: `DCA-USE-012` — a use case that publishes domain events has a transaction boundary — declarative `@Transactional` **or** an explicit `TransactionBoundary.inTransaction`; `DCA-USE-013` — a `@Transactional` use case calls no output port other than `Repository`, `Store`, `DomainEventPublisher`, `IntegrationEventPublisher` (`TransactionBoundary` is not a port; a use case that needs remote reads draws the explicit boundary instead of the annotation). In .NET the boundary is a decorator around `IUseCase<,>` or `ITransactionBoundary.InTransactionAsync`; `DCA-NET-006` keeps EF Core, `System.Data` and `System.Transactions` out of the application layer.
 
 **Note:** For complex multi-aggregate workflows, consider the **Saga pattern** (orchestration or choreography). This is an advanced topic beyond the scope of basic domain-centric architecture.
 
