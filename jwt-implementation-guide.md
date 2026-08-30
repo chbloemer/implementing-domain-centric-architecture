@@ -470,6 +470,29 @@ if (cookieValue == null || !cookieValue.equals(headerValue)) {
 
 Spring Security provides `CookieCsrfTokenRepository` for cookie-based CSRF token management, which handles token generation, storage, and validation automatically.
 
+### Server-Rendered Forms: Hidden Field Instead of Header
+
+The same double-submit pattern works without JavaScript. Spring Security renders the token into the model
+(`CsrfToken` request attribute); a `@ControllerAdvice` exposes it to every template as `_csrf`, and each writing
+form carries `<input type="hidden" name="_csrf" value="…">`. The filter compares the field with the `XSRF-TOKEN`
+cookie — ASP.NET Core's `@Html.AntiForgeryToken()` is the same mechanism. With a stateless JWT chain this is the
+only CSRF strategy that needs no server-side session:
+
+```java
+http.csrf(csrf -> csrf
+    .csrfTokenRepository(CookieCsrfTokenRepository.withHttpOnlyFalse())
+    .ignoringRequestMatchers("/api/**"));   // see below — only sound for Bearer-only endpoints
+```
+
+### Exempting an API: Only If Cookies Never Authenticate It
+
+A CSRF exemption for `/api/**` is correct only when a browser cannot authenticate a request to it by attaching
+cookies. That means the authentication filter must read the token from `Authorization: Bearer` **only** on those
+paths and must not issue cookies there — including on `/api/auth/login`, which otherwise becomes a login-CSRF
+vector. Browser sessions are established through the CSRF-protected web forms; the API returns the token in the
+response body and the client presents it as a header. An API that accepts the session cookie *and* is exempt from
+CSRF is the worst of both worlds.
+
 ### Recommendation Summary
 
 | Cookie | SameSite | CSRF mitigation needed? |
@@ -477,6 +500,10 @@ Spring Security provides `CookieCsrfTokenRepository` for cookie-based CSRF token
 | `shop-session` (access token) | `Strict` | No — `SameSite=Strict` is sufficient |
 | `shop-refresh` (refresh token) | `Strict` | No — `SameSite=Strict` is sufficient |
 | `shop-identity` (visitor token) | `Lax` | Yes if used for state changes — use Double Submit Cookie |
+
+`SameSite` is defence in depth. A server-rendered shop whose forms change state on a cookie session carries the token
+in every form regardless of the `SameSite` value; the table above only tells you which cookie makes the token
+mandatory.
 
 ---
 

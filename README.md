@@ -714,7 +714,10 @@ START: Something happened in the domain
 - Adapter converts domain events to integration events via mapper
 - Message broker (Kafka, RabbitMQ) used for async delivery
 - One topic per bounded context or per event type
-- Events published after successful transaction commit
+- Order inside the use case: `save`, then `publishAndClearEvents` — same transaction, never before the save
+- The publisher dispatches first and clears the aggregate afterwards; the clear is the acknowledgement that every listener saw the event. A throwing listener fails the use case and leaves the events on the aggregate
+- Integration events go through a **transactional outbox**: the publication is written *inside* the aggregate's transaction (Spring Modulith's event publication registry, an outbox table, an in-process stand-in), released to the dispatcher after commit, discarded on rollback. Registering only after commit leaves a crash window between commit and outbox entry
+- Delivery is asynchronous and at least once: failures are retried with backoff, permanently failing publications stay visible (`Failed`), outstanding ones are replayed on restart
 
 #### Event Consumption Rules
 - Event Consumer in adapter/incoming/messaging receives integration events
@@ -814,6 +817,8 @@ including the assertion that an unsaved mutation is invisible to the next reader
 - Controller is thin, no business logic
 - Controller handles framework-specific concerns
 - One controller method per use case (preferred)
+- A state-changing use case is reached only by an unsafe HTTP method (`POST`, `PUT`, `DELETE`) — never by `GET`; links do not create sessions, orders or carts. Prefetching, crawlers and cross-site navigation would otherwise trigger the change
+- Every browser form that changes state carries a CSRF token; cookie-authenticated endpoints without one are a defect. Token-authenticated APIs (`Authorization: Bearer`) are exempt only if they neither read nor issue cookies
 
 #### Output Adapter Rules
 - Output Adapter implements Output Port
