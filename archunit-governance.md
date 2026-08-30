@@ -14,9 +14,10 @@
 4. [Complete Test Suites](#complete-test-suites)
 5. [Context-Specific Rule Sets](#context-specific-rule-sets)
 6. [Adoption Path (Tiers)](#adoption-path-tiers)
-7. [Best Practices](#best-practices)
-8. [CI/CD Integration](#cicd-integration)
-9. [Common Pitfalls and Solutions](#common-pitfalls-and-solutions)
+7. [Tuning the Rule Catalog](#tuning-the-rule-catalog)
+8. [Best Practices](#best-practices)
+9. [CI/CD Integration](#cicd-integration)
+10. [Common Pitfalls and Solutions](#common-pitfalls-and-solutions)
 
 ---
 
@@ -992,7 +993,8 @@ Verifiable only after the team agrees on marker interfaces/annotations and a pac
 
 ### Tier 3 — Warning-Level Fitness Functions
 
-Trends to observe, not pass/fail gates — report instead of failing the build:
+Trends to observe, not pass/fail gates — report instead of failing the build (the *severity* dial in
+[Tuning the Rule Catalog](#tuning-the-rule-catalog)):
 
 - Component size (classes per context or package)
 - Coupling metrics: instability, abstractness, distance from the main sequence (ArchUnit metrics API, `com.tngtech.archunit.library.metrics`)
@@ -1006,6 +1008,59 @@ Some rules cannot be expressed as static checks at all. They belong in ADRs and 
 - One aggregate modified per transaction
 - Saga / process-manager design
 - Pattern selection per context (domain model vs transaction script) — see [Context-Specific Rule Sets](#context-specific-rule-sets)
+
+---
+
+## Tuning the Rule Catalog
+
+Whether the rules are hand-written or come from a rule library, a team adopting them on an existing
+code base needs four dials. Without them the rule set is an all-or-nothing proposition, and a single
+rule a team disagrees with is enough to make them abandon the whole thing.
+
+| Dial | What it does | When to use it |
+|------|--------------|----------------|
+| **Scope** | run only some rule sets or rule ids | staged adoption — start with cycles and layer dependencies |
+| **Severity** | report a violation without failing the build | a rule the team has committed to but not yet satisfied |
+| **Exceptions** | tolerate individual violations of an otherwise enforced rule | one legacy package, generated code, a documented carve-out |
+| **Baseline** | accept today's violations, fail only on new ones | large existing code bases, rule by rule |
+
+Two properties matter more than the mechanism:
+
+1. **A lowered rule stays visible.** Deleting a test for a rule the team decided against loses the
+   decision. Reporting the rule as skipped, together with the reason, keeps it in the run and in the
+   report where the next reader will find it.
+2. **A typo must fail.** Configuration that silently ignores an unknown rule id will eventually leave
+   a rule enforced that someone believes is switched off. Identifiers are therefore written in full
+   (`DCA-NAM-002`, never the abbreviated `NAM-002`), and an unknown one aborts the run.
+
+A rule library implements this as a selection object plus, for teams that would rather not touch test
+code, a properties file:
+
+```java
+selection = RuleSelection.all()
+    .onlySets("cycles", "layered", "hexagonal")             // scope
+    .excluding("DCA-NAM-002", "no DI framework in this project")   // off, with the reason
+    .warning("DCA-TAC-009", "value objects are being made final")  // reported, does not fail
+    .ignoringViolationsMatching("DCA-STR-003", ".*legacy.*")       // documented exception
+    .frozen("DCA-ONI-002");                                        // baseline
+```
+
+```properties
+rules.sets              = cycles,layered,hexagonal
+rules.off               = DCA-NAM-002
+rule.DCA-NAM-002.reason = no DI framework in this project
+rules.warn              = DCA-TAC-009
+rule.DCA-STR-003.ignore = .*legacy.*
+rules.freeze            = DCA-ONI-002
+```
+
+With hand-written rules the same dials exist in cruder form: scope is which test classes you keep,
+severity is a rule you evaluate and log instead of asserting, exceptions are extra `and()` predicates
+or ArchUnit's `archunit_ignore_patterns.txt`, and the baseline is `FreezingArchRule` (see
+[Freeze Violations for Legacy Code](#4-freeze-violations-for-legacy-code)).
+
+**What none of the dials should be used for:** hiding a rule that is genuinely violated in new code.
+Every lowered rule carries a reason, and the reason is the thing worth reviewing.
 
 ---
 
@@ -1064,6 +1119,10 @@ This allows you to:
 - Prevent new violations
 - Fix existing violations incrementally
 - Track progress over time
+
+Freezing needs a single `ArchRule` to build the baseline from. A check that iterates — one rule per
+bounded context, say — has no single rule to freeze; lower it to a warning instead (see
+[Tuning the Rule Catalog](#tuning-the-rule-catalog)).
 
 ### 5. Exclude Generated Code
 
