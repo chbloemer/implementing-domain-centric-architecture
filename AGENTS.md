@@ -8,13 +8,13 @@ This is a **documentation repository** focused on Domain-Centric Architecture - 
 
 **Purpose:** Reference documentation for teams implementing domain-centric architectures in Java/Spring Boot projects.
 
-**Reference Implementation:** [dca-ecommerce-sample](https://github.com/chbloemer/dca-ecommerce-sample) - Complete working implementation demonstrating all patterns described in this documentation.
+**Reference Implementation:** [dca-ecommerce-sample-java](https://github.com/domain-centric-development/dca-ecommerce-sample-java) - Complete working implementation demonstrating all patterns described in this documentation.
 
 ## ⚠️ This guide stands alone — no links out
 
 A reader may have this repository and nothing else. Content may be used freely, **pointers may not**:
 
-- ❌ no links to `dca-book/…`, no `https://github.com/chbloemer/dca-ecommerce-sample`, no source
+- ❌ no links to `dca-book/…`, no `https://github.com/domain-centric-development/dca-ecommerce-sample-java`, no source
   paths like `dca-ecommerce-sample-java/src/main/java/…`
 - ✅ describe the pattern, show the code inline, name a class — as self-contained text
 - ✅ links *within* this repository (`./spring-modulith.md`, `#section-anchors`)
@@ -119,7 +119,7 @@ com.company.project/
 
 ## Key Implementation Details from Reference
 
-The [dca-ecommerce-sample](https://github.com/chbloemer/dca-ecommerce-sample) demonstrates these specific choices:
+The [dca-ecommerce-sample-java](https://github.com/domain-centric-development/dca-ecommerce-sample-java) demonstrates these specific choices:
 
 ### Shared Kernel Structure
 - **Package Organization**: Consolidated under `marker/` with subpackages:
