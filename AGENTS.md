@@ -144,7 +144,7 @@ The [dca-ecommerce-sample-java](https://github.com/domain-centric-development/dc
 - **No separate**: `exception/` packages at domain level
 
 ### Adapter Layer
-- **Incoming**: `web/`, `api/`, `event/`, `mcp/`, `openhost/` (Open Host Service for cross-context APIs)
+- **Incoming**: `web/`, `api/` (REST), `event/`, `mcp/` — sub-packages are the project's choice, no rule checks them. An in-process Open Host Service lives in the context's published `{context}/api/` package, not in the adapter tree
 - **Outgoing**: `persistence/` (InMemory, JPA, JDBC), plus cross-context data adapters (e.g., `inventory/`, `pricing/`, `product/`)
 
 ### Technology Choices

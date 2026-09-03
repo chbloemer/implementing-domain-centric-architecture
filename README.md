@@ -1763,10 +1763,14 @@ public class ProductCatalogApi {
 
 #### Provider: In-Process Service (Modulith Optimization)
 
-For modulith deployments (single JVM), an in-process service avoids network overhead:
+For modulith deployments (single JVM), an in-process service avoids network overhead. It lives in the
+context's published `api/` package — the in-process contract, next to `events/` — not in the adapter
+tree: an Open Host Service is the *relationship* a context publishes, and the transport (in-process
+call, REST, gRPC, MCP) is a detail. The REST variant above is simply the same relationship as an
+incoming adapter.
 
 ```java
-// adapter/incoming/openhost/ProductCatalogService.java
+// api/ProductCatalogService.java  (published package of the Product context)
 @OpenHostService(context = "Product Catalog", description = "...")
 @Service
 public class ProductCatalogService {
@@ -1786,7 +1790,7 @@ public class ProductCatalogService {
 }
 ```
 
-**Important:** As an incoming adapter, the OHS calls **use cases (input ports)**, not repositories directly.
+**Important:** Like an incoming adapter, the OHS calls **use cases (input ports)**, not repositories directly.
 
 #### Consumer: Output Port + Adapter (Same for Both)
 
@@ -1838,8 +1842,8 @@ public class AddItemToCartUseCase {
 **Key Point:** Only the adapter implementation changes when migrating from modulith to microservices. Use cases and ports remain identical.
 
 **Rules:**
-- ✅ REST API in `adapter/incoming/api/` (canonical OHS)
-- ✅ In-process OHS in `adapter/incoming/openhost/` (modulith optimization)
+- ✅ REST API as an incoming adapter, e.g. `adapter/incoming/api/` (canonical OHS over the network; the sub-package is the project's choice)
+- ✅ In-process OHS in the context's published `api/` package (modulith optimization)
 - ✅ OHS returns DTOs, never domain objects
 - ✅ Consumer defines own output port specifying exactly what it needs
 - ✅ Consumer's adapter in `adapter/outgoing/{context}/` is the ONLY place that imports OHS
