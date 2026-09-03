@@ -632,7 +632,7 @@ static void bounded_contexts_should_not_depend_on_each_other(JavaClasses classes
 }
 ```
 
-**Two traps worth naming, because both produce a rule that can never fail.**
+**Three traps worth naming, because each produces a rule that can never fail.**
 
 *Enumerating contexts.* `resideInAPackage("..order..")` versus a hand-written list of the other
 three works until somebody adds a fifth context — which is then unguarded, silently. Discover the
@@ -645,6 +645,18 @@ forbidding `..sharedkernel..` from depending on `..domain..` forbids it from usi
 `sharedkernel.domain..`, so a per-context isolation rule must not treat the shared kernel as a
 foreign context. Discovery solves this for free — the shared kernel carries a different marker than
 a bounded context, so it never lands among the forbidden targets and needs no allow-list.
+
+*Selecting by declaration.* If the isolation rule iterates over the *declared* contexts — the
+packages that carry the marker — a module that owns `domain/`, `application/` and `adapter/` but
+declares nothing is outside the rule twice over: its imports are never checked, and nobody is
+forbidden to import its internals. It passes the whole suite for lack of a subject. Select
+**structurally** instead: every package that owns a layer is a module, declared or not, and is both
+a source and a forbidden target. What the marker decides is membership of the context map, not
+whether the module is isolated. The allow-list is a package convention too — a module's `api/`
+(synchronous, in-process) and `events/` (asynchronous) packages are the only part of it a neighbour's
+adapter may depend on. Package names, not framework annotations, so the rule holds without any
+module system on the class path, and a module that deliberately is *not* a bounded context (one that
+borrows a foreign system's language, say) needs no declaration to be governed.
 
 *And use `dependOnClassesThat`, never `accessClassesThat`.* ArchUnit counts an access as a method
 call or field access. A field, parameter or record component of a forbidden type is a dependency,

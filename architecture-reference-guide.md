@@ -246,8 +246,8 @@ Input Ports (Driving/Primary)        Output Ports (Driven/Secondary)
 sharedkernel/
 ├── marker/
 │   ├── tactical/                ← DDD tactical pattern interfaces
-│   │   ├── AggregateRoot.java   # public interface AggregateRoot<ID> extends Entity<ID> {}
-│   │   ├── Entity.java          # public interface Entity<ID> { ID getId(); }
+│   │   ├── AggregateRoot.java   # interface AggregateRoot<T extends AggregateRoot<T, ID>, ID extends Id>
+│   │   ├── Entity.java          # interface Entity<T extends Entity<T, ID>, ID extends Id> { ID id(); }
 │   │   ├── Value.java           # public interface Value {}
 │   │   ├── DomainEvent.java     # public interface DomainEvent { Instant occurredOn(); }
 │   │   ├── DomainService.java   # Marker interface
@@ -263,7 +263,7 @@ sharedkernel/
 │   │   │   └── UseCase.java     # public interface UseCase<INPUT, OUTPUT> extends InputPort { OUTPUT execute(INPUT input); }
 │   │   └── out/                 ← Output port interfaces
 │   │       ├── OutputPort.java  # public interface OutputPort {} (marker)
-│   │       ├── Repository.java  # public interface Repository<T, ID> extends OutputPort {}
+│   │       ├── Repository.java  # interface Repository<T extends AggregateRoot<T, ID>, ID extends Id>
 │   │       └── DomainEventPublisher.java  # public interface DomainEventPublisher extends OutputPort { void publish(DomainEvent event); }
 │   └── infrastructure/          ← Infrastructure markers
 │       └── AsyncInitialize.java # Marker annotation for async initialization
