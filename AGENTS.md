@@ -60,7 +60,7 @@ Infrastructure → Adapters → Application → Domain
 Each use case is self-contained in its own folder:
 ```
 application/
-├── {usecasename}/
+├── {usecasename}/                  # or {feature}/{usecasename}/ once the context groups its use cases
 │   ├── *InputPort.java      # Interface: extends UseCase<INPUT, OUTPUT>
 │   ├── *UseCase.java         # Implementation: implements *InputPort
 │   ├── *Command.java         # Input (writes) or *Query.java (reads)
@@ -98,6 +98,7 @@ com.company.project/
 
 ### Application Layer
 - **Use Case Folders**: lowercase (e.g., `createorder`, `additemtocart`, `getproductbyid`)
+- **Feature Folders** (optional group of use cases, `application/{feature}/{usecase}`): lowercase terms of the ubiquitous language (e.g., `cartrecovery`, `checkoutcompletion`); one context is flat or grouped, never both (`DCA-USE-014`); never technical buckets (`commands`, `queries`, `handlers`) or delivery mechanisms (`web`, `api`)
 - **Input Ports**: `*InputPort extends UseCase<Command, Result>` (extends `UseCase`, not `InputPort`)
 - **Output Ports**: Domain names (e.g., `OrderRepository`, `PaymentGateway`, `DomainEventPublisher`)
 - **Use Cases**: `*UseCase implements *InputPort`

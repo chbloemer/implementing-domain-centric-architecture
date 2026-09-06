@@ -681,7 +681,23 @@ static final ArchRule no_cycles_between_bounded_contexts =
         .matching("com.company.project.(*).(*)..")   // every context, not a fixed list
         .should().beFreeOfCycles()
         .because("Bounded contexts should not have cyclic dependencies");
+
+// Inside one context: the packages directly below application/ — the features in a grouped layout
+// (application/{feature}/{usecase}), the use cases in a flat one — must not depend on each other in
+// a circle. application/shared is the context-wide port package and is not a slice. Catalog: DCA-CYC-005.
+@ArchTest
+static final ArchRule no_cycles_between_features =
+    slices()
+        .matching("com.company.project.order.application.(*)..")
+        .ignoreDependency(alwaysTrue(), resideInAPackage("..application.shared.."))
+        .should().beFreeOfCycles()
+        .because("A cycle between two features means the grouping does not carry its weight");
 ```
+
+A second structural rule keeps the feature level legible: within one module the use-case packages use *one*
+depth — all `application.<usecase>` or all `application.<feature>.<usecase>` — never a mixture, and never a
+use case directly in `application` or nested deeper than a feature (`DCA-USE-014`). Both rules check package
+shape only; they infer nothing about bounded contexts or aggregate ownership.
 
 
 ### 8. Context Map Rules

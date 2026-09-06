@@ -140,7 +140,7 @@ application/
 - Interface and implementation belong together (same bounded context, same use case)
 - Reduces navigation between different directories
 - Makes refactoring easier (move one folder = move entire use case)
-- Aligns with "package by feature" principle
+- Aligns with the package-by-bounded-context principle: one folder per use case, optionally grouped into domain-named *features* (`application/{feature}/{usecase}/`) once a context has outgrown a flat list
 - Better team collaboration (less merge conflicts)
 
 ### 3. Adapters Layer

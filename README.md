@@ -1138,7 +1138,8 @@ Two rules of the DCA catalog make this a compile-time fact: `DCA-USE-012` — a 
 
 ### PACKAGING RULES
 
-- Package by feature/bounded context preferred
+- Package by bounded context, then by layer; inside the application layer by use case — optionally grouped into
+  features (see [Grouping use cases into features](#grouping-use-cases-into-features))
 - Layer separation enforced by module structure
 - Domain module has zero external dependencies
 - Application module depends only on domain
@@ -1205,6 +1206,93 @@ This structure shows **ALL possible subdivisions** for a fully-featured bounded 
 - IDEs handle this automatically with refactoring tools
 
 **The structure below is a REFERENCE showing all options, not a prescription to use everything from day one.**
+
+#### Grouping use cases into features
+
+DCA has three scales below the system: the **bounded context**, the **layer**, and the **use case**. When the
+application layer of one context grows — a dozen use-case packages in one flat list — a fourth, optional scale
+fills the gap between layer and use case: the **feature**.
+
+```text
+system -> bounded context -> layer -> feature -> use case
+```
+
+A *feature* is a domain-named group of related use cases inside one bounded context. It is a navigation and
+cohesion boundary and nothing more: not a layer, not a module, not an aggregate owner, not a deployment unit.
+
+The two canonical forms of the application layer — and the only two — are:
+
+```text
+application/{usecase}/              # flat: a small context
+application/{feature}/{usecase}/    # grouped: cohesive clusters have emerged
+```
+
+A context that has grown into features:
+
+```text
+checkout/
+├── domain/                              # concepts owned by the whole context — never mirrored by feature
+│   ├── model/
+│   ├── service/
+│   ├── event/
+│   └── readmodel/
+├── application/
+│   ├── session/                         # feature
+│   │   ├── startcheckout/               # use case — input port, implementation, command/query, result
+│   │   ├── getactivecheckoutsession/
+│   │   ├── getcheckoutsession/
+│   │   └── getconfirmedcheckoutsession/
+│   ├── checkoutcompletion/              # feature — a term of the ubiquitous language, not UI jargon
+│   │   ├── submitbuyerinfo/
+│   │   ├── getshippingoptions/
+│   │   ├── submitdelivery/
+│   │   ├── getpaymentproviders/
+│   │   ├── submitpayment/
+│   │   └── confirmcheckout/
+│   ├── cartsync/
+│   │   └── synccheckoutwithcart/
+│   └── shared/                          # context-wide output ports only
+├── adapter/
+│   ├── incoming/
+│   │   ├── web/{session,checkoutcompletion}/   # protocol first, feature below it
+│   │   └── event/cartsync/
+│   └── outgoing/{persistence,payment,cart,product,event}/   # by technology or partner, as before
+├── api/
+├── events/
+└── infrastructure/
+```
+
+**The eight rules of the feature scale:**
+
+1. **Flat first.** A small context keeps `application/{usecase}/`. Add the feature level when cohesive clusters
+   have emerged and the flat list has become hard to navigate. The "about ten entries" guidance above is a prompt
+   to *evaluate* grouping, not a numeric law.
+2. **Feature names come from the ubiquitous language**, lowercase: `cartrecovery`, `checkoutcompletion`,
+   `session`. Never technical buckets (`commands`, `queries`, `handlers`, `services`, `utils`) and never delivery
+   mechanisms (`web`, `api`).
+3. **The use case stays the smallest application unit.** Its input port, implementation, command or query,
+   result and any use-case-specific output port stay together in the use-case package.
+4. **`application/shared` stays context-wide.** Repository and Store interfaces continue to live there
+   (`DCA-TAC-014`, `DCA-TAC-019`); there is no `application/{feature}/shared`. A port used by one use case stays
+   with that use case, a port used by several belongs in `application/shared`.
+5. **The domain is organised by concept, not mirrored by feature.** Aggregates and value objects belong to the
+   bounded context and may serve several features — a feature owns no aggregate.
+6. **Incoming adapters may mirror features *below* their protocol:** `adapter/incoming/web/{feature}`,
+   `adapter/incoming/event/{feature}`. The protocol segment stays first, so the adapter vocabulary and its rules
+   (`DCA-NAM-011`) keep working. Outgoing adapters stay organised by technology or partner.
+7. **One form per context.** Within one context, use cases are either all flat or all grouped once a migration is
+   complete; a lasting mixture leaves the reader guessing whether a direct child of `application/` is a feature,
+   a use case or a leftover. A short-lived mixed state during one refactoring is fine — move one whole context
+   atomically. `DCA-USE-014` checks this; `DCA-CYC-005` keeps the feature (or, in a flat context, use-case)
+   packages free of cycles — a one-directional dependency between two features is allowed.
+8. **A vertical slice is not a feature.** `{context}/{feature}/{domain,application,adapter}` puts a layer segment
+   below the feature, so the structural module discovery rightly treats every slice as a module of its own and the
+   isolation rules demand communication through `api`/`events`. If that boundary is what you want, model it as a
+   module and ask whether it is a separate bounded context. Do not weaken the isolation rules to let a shared
+   aggregate span such slices.
+
+A feature relieves *package pressure*. It is not evidence against splitting a context: when language, model or
+team ownership have diverged, split the context — grouping use cases does not resolve that.
 
 ---
 
@@ -1502,6 +1590,28 @@ APPLICATION LAYER
 - ✅ **Adapters clearly separated** - `adapter/incoming` and `adapter/outgoing`
 - ✅ **Self-documenting** - Folder name = business operation name
 - ✅ **Team-friendly** - Different developers can work on different use cases independently
+
+**When the flat list outgrows itself — features:**
+
+```
+APPLICATION LAYER (grouped form)
+├── ordering/                      (FEATURE - a term of the ubiquitous language)
+│   ├── createorder/                   ← use case, unchanged inside
+│   ├── updateorder/
+│   └── cancelorder/
+├── fulfilment/                    (FEATURE)
+│   ├── shiporder/
+│   └── trackshipment/
+├── reporting/                     (FEATURE)
+│   └── findorder/
+└── shared/                        (CONTEXT-WIDE OUTPUT PORTS - not per feature)
+    ├── OrderRepository.java
+    └── PaymentGateway.java
+```
+
+The use-case packages are untouched by the move — only their parent changes. The domain layer is not
+mirrored: `Order` serves `ordering`, `fulfilment` and `reporting` alike. See
+[Grouping use cases into features](#grouping-use-cases-into-features) for the rules.
 
 
 ## DEPENDENCY STRUCTURE
